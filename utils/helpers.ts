@@ -169,7 +169,7 @@ export function getTokensWithCustomBridgeTokens(
   return sortedTokens;
 }
 
-// @zksyncos 
+// @zksyncos
 // Helpers for identifying withdrawal (L2-L1) transaction status
 
 export function selectL2ToL1LogIndex(logs: any[]): number | null {
@@ -190,7 +190,7 @@ function extractRevertData(err: any): `0x${string}` | null {
   return null;
 }
 
-// 0xa969e486 === LocalRootIsZero()	
+// 0xa969e486 === LocalRootIsZero()
 const LOCAL_ROOT_IS_ZERO_SELECTOR = "0xa969e486" as const;
 
 export const isLocalRootIsZero = (err: any) =>

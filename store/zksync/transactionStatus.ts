@@ -1,5 +1,5 @@
 import { useStorage } from "@vueuse/core";
-import { decodeEventLog } from "viem";
+import { decodeEventLog, type Address } from "viem";
 import { Wallet, typechain } from "zksync-ethers";
 import IL1Nullifier from "zksync-ethers/abi/IL1Nullifier.json";
 import IZkSyncHyperchain from "zksync-ethers/abi/IZkSyncHyperchain.json";
@@ -28,7 +28,7 @@ export type TransactionInfo = {
 export const ESTIMATED_DEPOSIT_DELAY = 15 * 60 * 1000; // 15 minutes
 export const WITHDRAWAL_DELAY = 5 * 60 * 60 * 1000; // 5 hours
 
-// @zksyncos ZKsyncOS does not include getTransactionDetails so using executeTxHash as an 
+// @zksyncos ZKsyncOS does not include getTransactionDetails so using executeTxHash as an
 // indicator of finalization readiness is not available. Instead (a bit hacky), we first check
 // tx receipt on L2 for success, query zks_getL1L2LogProofs to ensure tx is included in the batch
 // and then make an simulation attempt to `finalizeDeposit` to see if we hit `LocalRootIsZero()`
@@ -186,14 +186,14 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
           chainId,
           l2BatchNumber: BigInt(p.l1BatchNumber ?? 0n),
           l2MessageIndex: BigInt(p.l2MessageIndex),
-          l2Sender: p.sender as `0x${string}`,
+          l2Sender: p.sender as Address,
           l2TxNumberInBatch: Number(p.l2TxNumberInBlock),
-          message: p.message as `0x${string}`,
-          merkleProof: p.proof as readonly `0x${string}`[],
+          message: p.message as Hash,
+          merkleProof: p.proof as readonly Hash[],
         };
 
         const res = await publicClient.estimateContractGas({
-          address: l1NullifierAddr as `0x${string}`,
+          address: l1NullifierAddr as Address,
           abi: IL1Nullifier,
           functionName: "finalizeDeposit",
           args: [finalizeDepositParams],

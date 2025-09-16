@@ -8,6 +8,7 @@ import { customBridgeTokens } from "@/data/customBridgeTokens";
 import { useSentryLogger } from "../useSentryLogger";
 
 import type { Hash } from "@/types";
+import type { Address } from "viem";
 import type { FinalizeWithdrawalParams } from "zksync-ethers/build/types";
 
 export default (transactionInfo: ComputedRef<TransactionInfo>) => {
@@ -84,7 +85,7 @@ export default (transactionInfo: ComputedRef<TransactionInfo>) => {
     if (isCustomBridge) {
       // Use custom bridge finalization
       return {
-        address: l1BridgeAddress as Hash,
+        address: l1BridgeAddress as Address,
         abi: L1_BRIDGE_ABI,
         account: onboardStore.account.address!,
         functionName: "finalizeWithdrawal",
@@ -92,8 +93,8 @@ export default (transactionInfo: ComputedRef<TransactionInfo>) => {
           BigInt(p.l1BatchNumber ?? 0n),
           BigInt(p.l2MessageIndex),
           Number(p.l2TxNumberInBlock) as number,
-          p.message as `0x${string}`,
-          p.proof as readonly `0x${string}`[],
+          p.message as Hash,
+          p.proof as Hash[],
         ],
       } as const;
     } else {
@@ -102,10 +103,10 @@ export default (transactionInfo: ComputedRef<TransactionInfo>) => {
         chainId: BigInt(chainId),
         l2BatchNumber: BigInt(p.l1BatchNumber ?? 0n),
         l2MessageIndex: BigInt(p.l2MessageIndex),
-        l2Sender: p.sender as `0x${string}`,
+        l2Sender: p.sender as Address,
         l2TxNumberInBatch: Number(p.l2TxNumberInBlock),
-        message: p.message,
-        merkleProof: p.proof,
+        message: p.message as Hash,
+        merkleProof: p.proof as Hash[],
       };
 
       return {

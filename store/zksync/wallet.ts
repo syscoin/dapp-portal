@@ -56,16 +56,6 @@ export const useZkSyncWalletStore = defineStore("zkSyncWallet", () => {
     ) as unknown as L1Signer;
   };
 
-  const getBaseToken = async (): Promise<string> => {
-    try {
-      const l1 = await getL1Signer();
-      if (l1) return await l1.getBaseToken();
-      return await getL1VoidSigner(true).getBaseToken();
-    } catch {
-      return await getL1VoidSigner(true).getBaseToken();
-    }
-  };
-
   const {
     result: accountState,
     execute: requestAccountState,
@@ -229,7 +219,6 @@ export const useZkSyncWalletStore = defineStore("zkSyncWallet", () => {
     getSigner,
     getL1Signer,
     getL1VoidSigner,
-    getBaseToken,
 
     balance,
     balanceInProgress: computed(() => balanceInProgress.value),

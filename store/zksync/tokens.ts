@@ -50,7 +50,7 @@ export const useZkSyncTokensStore = defineStore("zkSyncTokens", () => {
     if (!baseToken) {
       baseToken = {
         address: L2_BASE_TOKEN_ADDRESS,
-        l1Address: await walletStore.getBaseToken(),
+        l1Address: await walletStore.getL1VoidSigner(true).getBaseToken(),
         symbol: "BASETOKEN",
         name: "Base Token",
         decimals: 18,
