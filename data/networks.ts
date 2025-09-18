@@ -87,9 +87,9 @@ const publicChains: ZkSyncNetwork[] = [
     id: 270,
     key: "stage",
     name: "ZKsyncOS Stage",
-    rpcUrl: "https://zksync-os-stage-api.zksync-nodes.com", // TODO (@zksyncos): replace with the final staging RPC when available
-    blockExplorerUrl: "https://staging-scan-v2--zksync-os-stage-8eautryu.web.app", // TODO (@zksyncos): replace with the final staging RPC when available
-    // blockExplorerApi: "https://block-explorer-api.zksync-os-stage.zksync.dev", // TODO (@zksyncos): replace with the final staging RPC when available
+    rpcUrl: "https://zksync-os-stage-api.zksync-nodes.com",
+    blockExplorerUrl: "https://zksync-os-stage.staging-scan-v2.zksync.dev",
+    blockExplorerApi: "https://block-explorer-api.zksync-os-stage.zksync.dev",
     l1Network: l1Networks.sepolia,
     hidden: false,
     displaySettings: {
