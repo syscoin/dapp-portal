@@ -57,7 +57,11 @@ export const useZkSyncEthereumBalanceStore = defineStore("zkSyncEthereumBalances
         const amount = await getBalance(wagmiConfig, {
           address: account.value.address!,
           chainId: l1Network.value!.id,
-          token: token.address.toUpperCase() === utils.ETH_ADDRESS.toUpperCase() ? undefined : (token.address! as Hash),
+          token:
+            token.address.toUpperCase() === utils.ETH_ADDRESS.toUpperCase() ||
+            token.address.toUpperCase() === utils.ETH_ADDRESS_IN_CONTRACTS.toUpperCase()
+              ? undefined
+              : (token.address! as Hash),
         });
         return {
           ...token,

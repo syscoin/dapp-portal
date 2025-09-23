@@ -84,12 +84,12 @@ export const dockerizedNode: ZkSyncNetwork = {
 
 const publicChains: ZkSyncNetwork[] = [
   {
-    id: 270,
-    key: "stage",
-    name: "ZKsyncOS Stage",
-    rpcUrl: "https://zksync-os-stage-api.zksync-nodes.com",
-    blockExplorerUrl: "https://zksync-os-stage.staging-scan-v2.zksync.dev",
-    blockExplorerApi: "https://block-explorer-api.zksync-os-stage.zksync.dev",
+    id: 8022833,
+    key: "testnet",
+    name: "ZKsyncOS Testnet",
+    rpcUrl: "https://zksync-os-testnet-alpha.zksync.dev",
+    blockExplorerUrl: "https://zksync-os-testnet-alpha.staging-scan-v2.zksync.dev",
+    blockExplorerApi: "https://block-explorer-api.zksync-os-testnet-alpha.zksync.dev",
     l1Network: l1Networks.sepolia,
     hidden: false,
     displaySettings: {
