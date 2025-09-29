@@ -185,7 +185,7 @@
               :loading="feeLoading"
             />
           </transition>
-          <CommonButtonLabel v-if="!isCustomNode" as="span" class="ml-auto text-right">~15 minutes</CommonButtonLabel>
+          <CommonButtonLabel v-if="!isCustomNode" as="span" class="ml-auto text-right">~15 seconds</CommonButtonLabel>
         </div>
         <transition v-bind="TransitionAlertScaleInOutTransition" mode="out-in">
           <CommonAlert
@@ -415,7 +415,7 @@ const tokensStore = useZkSyncTokensStore();
 const providerStore = useZkSyncProviderStore();
 const zkSyncEthereumBalance = useZkSyncEthereumBalanceStore();
 const eraWalletStore = useZkSyncWalletStore();
-const { account, isConnected, walletNotSupported, walletWarningDisabled } = storeToRefs(onboardStore);
+const { account, isConnected, walletWarningDisabled } = storeToRefs(onboardStore);
 const { eraNetwork } = storeToRefs(providerStore);
 const { destinations } = storeToRefs(useDestinationsStore());
 const { l1BlockExplorerUrl } = storeToRefs(useNetworkStore());
@@ -701,11 +701,7 @@ const buttonContinue = () => {
     return;
   }
   if (step.value === "form") {
-    if (walletNotSupported.value) {
-      step.value = "wallet-warning";
-    } else {
-      step.value = "confirm";
-    }
+    step.value = "confirm";
   } else if (step.value === "wallet-warning") {
     step.value = "confirm";
   } else if (step.value === "confirm") {

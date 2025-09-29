@@ -25,7 +25,7 @@ export type TransactionInfo = {
   };
 };
 
-export const ESTIMATED_DEPOSIT_DELAY = 15 * 60 * 1000; // 15 minutes
+export const ESTIMATED_DEPOSIT_DELAY = 15 * 1000; // 15 seconds
 export const WITHDRAWAL_DELAY = 5 * 60 * 60 * 1000; // 5 hours
 
 // @zksyncos ZKsyncOS does not include getTransactionDetails so using executeTxHash as an
