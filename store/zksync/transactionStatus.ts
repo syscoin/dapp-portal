@@ -145,7 +145,6 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
     const client = createEthersClient({ l1: signer.provider, l2: signer.providerL2, signer });
     const sdk = createEthersSdk(client);
     const status = await sdk.withdrawals.status(transaction.transactionHash as Hash);
-    console.log("withdrawal status", status, transaction.transactionHash); // eslint-disable-line no-console
     switch (status.phase) {
       case "FINALIZED":
         transaction.info.completed = true;
