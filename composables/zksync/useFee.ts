@@ -1,4 +1,3 @@
-import { createEthersClient, createEthersSdk } from "@dutterbutter/zksync-sdk/ethers";
 import { estimateGas } from "@wagmi/core";
 import { AbiCoder } from "ethers";
 import { encodeFunctionData, type Address } from "viem";
@@ -25,8 +24,6 @@ export default (
   tokens: Ref<{ [tokenSymbol: string]: Token } | undefined>,
   balances: Ref<TokenAmount[]>
 ) => {
-  const { getL1VoidSigner } = useZkSyncWalletStore();
-
   let params: FeeEstimationParams | undefined;
 
   const gasLimit = ref<bigint | undefined>();
@@ -162,16 +159,12 @@ export default (
               amount: tokenBalance,
             });
           } else {
-            const signer = await getL1VoidSigner(true);
-            const client = createEthersClient({ l1: signer.provider, l2: signer.providerL2, signer });
-            const sdk = createEthersSdk(client);
-
-            const quote = await sdk.withdrawals.quote({
+            return provider.estimateGasWithdraw({
+              from: params!.from,
               to: params!.to,
               token: params!.tokenAddress,
-              amount: 1n, // TODO: estimation fails if we pass actual user balance
+              amount: params!.amount,
             });
-            return quote.fees.gasLimit;
           }
         }),
       ]);

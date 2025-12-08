@@ -131,6 +131,23 @@ export declare namespace Api {
       amount: string;
       status: "NotFinalized" | "Finalized";
     };
+
+    type AccountTokenBalance = {
+      TokenAddress: string;
+      TokenName: string;
+      TokenSymbol: string;
+      TokenDivisor: string;
+      TokenQuantity: string;
+      TokenIconURL?: string;
+      TokenPriceUSD?: string;
+      l1Address?: string; // Optional, might be present
+    };
+
+    type AccountTokenBalanceResponse = {
+      status: string;
+      message: string;
+      result: AccountTokenBalance[];
+    };
   }
 }
 

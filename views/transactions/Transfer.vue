@@ -362,17 +362,19 @@ const availableTokens = computed(() => {
   const list = getTokensWithCustomBridgeTokens(
     Object.values(tokens.value),
     AddressChainType.L2,
-    eraNetwork.value.l1Network?.id
+    eraNetwork.value.lNetwork?.id
   );
+  
   if (props.type === "withdrawal") {
-    return list.filter((e) => e.l1Address);
+    return list;
   }
   return list;
 });
 const availableBalances = computed(() => {
+  console.log("availableBalances recomputed");
   if (props.type === "withdrawal") {
     if (!tokens.value) return [];
-    return balance.value.filter((e) => e.l1Address);
+    return balance.value;
   }
   return balance.value;
 });

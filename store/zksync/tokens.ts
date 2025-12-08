@@ -2,6 +2,7 @@ import { $fetch } from "ofetch";
 import { utils } from "zksync-ethers";
 
 import { customBridgeTokens } from "@/data/customBridgeTokens";
+import { mapApiToken } from "@/utils/mappers";
 
 import type { Api, Token } from "@/types";
 
@@ -10,6 +11,15 @@ export const useZkSyncTokensStore = defineStore("zkSyncTokens", () => {
   const walletStore = useZkSyncWalletStore();
 
   const { eraNetwork } = storeToRefs(providerStore);
+  const onboardStore = useOnboardStore();
+  const { account } = storeToRefs(onboardStore);
+
+  watch(
+    () => account.value.address,
+    () => {
+      resetTokens();
+    }
+  );
 
   const {
     result: tokensRaw,
@@ -27,14 +37,53 @@ export const useZkSyncTokensStore = defineStore("zkSyncTokens", () => {
     let configTokens: Token[] = [];
 
     if (eraNetwork.value.blockExplorerApi) {
-      const responses: Api.Response.Collection<Api.Response.Token>[] = await Promise.all([
-        $fetch(`${eraNetwork.value.blockExplorerApi}/tokens?minLiquidity=0&limit=100&page=1`),
-        $fetch(`${eraNetwork.value.blockExplorerApi}/tokens?minLiquidity=0&limit=100&page=2`),
-        $fetch(`${eraNetwork.value.blockExplorerApi}/tokens?minLiquidity=0&limit=100&page=3`),
-      ]);
-      explorerTokens = responses.map((response) => response.items.map(mapApiToken)).flat();
-      baseToken = explorerTokens.find((token) => token.address.toUpperCase() === L2_BASE_TOKEN_ADDRESS.toUpperCase());
-      ethToken = explorerTokens.find((token) => token.address.toUpperCase() === ethL2TokenAddress.toUpperCase());
+      if (!account.value.address) {
+        // If account is not available, we can't fetch individual tokens
+        explorerTokens = [];
+      } else {
+        try {
+          console.log("Before the api call::");
+          console.log("eraNetwork.value.blockExplorerApi", eraNetwork.value.blockExplorerApi);
+          // New Etherscan-compatible API
+          const response: Api.Response.AccountTokenBalanceResponse = await $fetch(
+            `${eraNetwork.value.blockExplorerApi}/api?module=account&action=addresstokenbalance&address=${account.value.address}`
+          );
+          console.log("response", response);
+          if (response.status === "1" && Array.isArray(response.result)) {
+            explorerTokens = response.result.map((item) => ({
+              address: item.TokenAddress,
+              name: item.TokenName,
+              symbol: item.TokenSymbol,
+              decimals: Number(item.TokenDivisor),
+              iconUrl: item.TokenIconURL || undefined,
+              price: item.TokenPriceUSD ? parseFloat(item.TokenPriceUSD) : undefined,
+              l1Address: item.l1Address || undefined,
+            }));
+          } else {
+            // Fallback to old API or handle empty result
+            explorerTokens = [];
+          }
+        } catch (error) {
+          // Try old API as fallback if the new one fails (or if the URL structure is mixed)
+          try {
+            let page = 1;
+            while (true) {
+              const response: Api.Response.Collection<Api.Response.Token> = await $fetch(
+                `${eraNetwork.value.blockExplorerApi}/tokens?minLiquidity=0&limit=100&page=${page}`
+              );
+              explorerTokens = [...explorerTokens, ...response.items.map(mapApiToken)];
+              if (response.items.length < 100) break;
+              page++;
+            }
+          } catch (e) {
+            console.warn("Failed to fetch tokens from both APIs", e);
+          }
+        }
+      }
+      if (explorerTokens.length > 0) {
+        baseToken = explorerTokens.find((token) => token.address.toUpperCase() === L2_BASE_TOKEN_ADDRESS.toUpperCase());
+        ethToken = explorerTokens.find((token) => token.address.toUpperCase() === ethL2TokenAddress.toUpperCase());
+      }
     }
 
     if (eraNetwork.value.getTokens && (!baseToken || !ethToken)) {
@@ -54,23 +103,23 @@ export const useZkSyncTokensStore = defineStore("zkSyncTokens", () => {
       baseToken =
         baseTokenAddress === L2_BASE_TOKEN_ADDRESS
           ? {
-              address: L2_BASE_TOKEN_ADDRESS,
-              l1Address: utils.ETH_ADDRESS,
-              symbol: "ETH",
-              name: "Ether",
-              decimals: 18,
-              iconUrl: "/img/eth.svg",
-              isETH: true,
-            }
+            address: L2_BASE_TOKEN_ADDRESS,
+            l1Address: utils.ETH_ADDRESS,
+            symbol: "ETH",
+            name: "Ether",
+            decimals: 18,
+            iconUrl: "/img/eth.svg",
+            isETH: true,
+          }
           : {
-              address: L2_BASE_TOKEN_ADDRESS,
-              l1Address: baseTokenAddress,
-              symbol: "BASETOKEN",
-              name: "Base Token",
-              decimals: 18,
-              iconUrl: "/img/base.svg",
-              isETH: false,
-            };
+            address: L2_BASE_TOKEN_ADDRESS,
+            l1Address: baseTokenAddress,
+            symbol: "BASETOKEN",
+            name: "Base Token",
+            decimals: 18,
+            iconUrl: "/img/base.svg",
+            isETH: false,
+          };
     }
     if (!ethToken && !baseToken.isETH) {
       ethToken = {

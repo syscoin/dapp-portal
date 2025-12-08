@@ -35,11 +35,13 @@ export default (
         functionName: "allowance",
         args: [accountAddress.value, contractAddress],
       })) as bigint;
+      console.log("allowance", allowance);
       return BigInt(allowance);
     },
     { cache: false }
   );
-
+  console.log("useAllowance initialized");
+  
   const requestAllowance = async () => {
     if (
       accountAddress.value &&

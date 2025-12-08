@@ -127,11 +127,6 @@ export default (getL1Signer: () => Promise<L1Signer | undefined>) => {
           amount: BigInt(transaction.amount?.toString()),
           l2GasLimit: fee.l2GasLimit,
           gasPerPubdata: fee.gasPerPubdata,
-          l1TxOverrides: {
-            gasLimit: fee.l1GasLimit,
-            maxFeePerGas: fee.maxFeePerGas,
-            maxPriorityFeePerGas: fee.maxPriorityFeePerGas,
-          },
         });
 
         const depositResponse = {

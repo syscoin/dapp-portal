@@ -13,6 +13,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
   const providerStore = useZkSyncProviderStore();
   const { eraNetwork } = storeToRefs(providerStore);
   const { captureException } = useSentryLogger();
+  const isHyperchainNode = usePortalRuntimeConfig().nodeType === "hyperchain";
 
   const isNativeToken = ref<boolean | null>(null);
   const allowanceCheckInProgress = ref<boolean>(false);
@@ -26,7 +27,16 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
         isNativeToken.value = null;
         return;
       }
-      if (tokenAddress.value === L2_BASE_TOKEN_ADDRESS) {
+
+      if (isHyperchainNode) {
+        isNativeToken.value = false;
+        assetId.value = null;
+        approvedAllowance.value = null;
+        allowanceCheckInProgress.value = false;
+        return;
+      }
+
+      if (tokenAddress.value.toLowerCase() === L2_BASE_TOKEN_ADDRESS.toLowerCase()) {
         isNativeToken.value = false;
         return;
       }

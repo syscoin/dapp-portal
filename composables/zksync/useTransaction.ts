@@ -3,7 +3,8 @@ import { getWalletClient, getPublicClient, prepareTransactionRequest, custom } f
 import { ethers, type BigNumberish, type ContractTransaction } from "ethers";
 import { createWalletClient, type Hash, type Address } from "viem";
 import { eip712WalletActions } from "viem/zksync";
-
+import { createEthersClient, createEthersSdk } from "@dutterbutter/zksync-sdk/ethers";
+import { L2_BASE_TOKEN_ADDRESS } from "@dutterbutter/zksync-sdk/core";
 import { isCustomNode } from "@/data/networks";
 import { wagmiConfig } from "~/data/wagmi";
 
@@ -33,6 +34,8 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
   const eraWalletStore = useZkSyncWalletStore();
   const { captureException } = useSentryLogger();
   const { selectedNetwork } = storeToRefs(useNetworkStore());
+  const portalRuntimeConfig = usePortalRuntimeConfig();
+  const isHyperchainNode = portalRuntimeConfig.nodeType === "hyperchain";
 
   const retrieveBridgeAddresses = useMemoize(() =>
     getProvider().then((provider) => provider.getDefaultBridgeAddresses())
@@ -76,8 +79,32 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
       if (!signer) throw new Error("ZKsync Signer is not available");
 
       accountAddress = (await signer.getAddress()) as Address;
+      await eraWalletStore.walletAddressValidate();
+      await validateAddress(transaction.to);
 
       const provider = await getProvider();
+
+      if (isHyperchainNode && transaction.type === "withdrawal") {
+        status.value = "waiting-for-signature";
+
+        const l1VoidSigner = await eraWalletStore.getL1VoidSigner(true);
+        if (!l1VoidSigner) throw new Error("L1 signer is not available");
+
+        const client = createEthersClient({ l1: l1VoidSigner.provider, l2: signer.providerL2, signer });
+        const sdk = createEthersSdk(client);
+        const amountBigInt = BigInt(transaction.amount?.toString());
+        const withdrawal = await sdk.withdrawals.create({
+          to: transaction.to ?? accountAddress,
+          token: transaction.tokenAddress,
+          amount: amountBigInt,
+        });
+
+        if (!withdrawal.l2TxHash) throw new Error("Withdrawal transaction hash is not available");
+
+        transactionHash.value = withdrawal.l2TxHash as Hash;
+        status.value = "done";
+        return { hash: transactionHash.value };
+      }
 
       const getRequiredBridgeAddress = async () => {
         if (transaction.bridgeAddress) return transaction.bridgeAddress;
@@ -86,9 +113,6 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
         return bridgeAddresses.sharedL2 as Address;
       };
       const bridgeAddress = transaction.type === "withdrawal" ? await getRequiredBridgeAddress() : undefined;
-
-      await eraWalletStore.walletAddressValidate();
-      await validateAddress(transaction.to);
 
       status.value = "waiting-for-signature";
 
@@ -174,6 +198,7 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
         return txResponse;
       }
     } catch (err) {
+      console.log("Error in commitTransaction:", err);
       error.value = formatError(err as Error);
       status.value = "not-started";
       captureException({
