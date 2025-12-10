@@ -1,6 +1,7 @@
 import { estimateGas } from "@wagmi/core";
 import { AbiCoder } from "ethers";
 import { encodeFunctionData, type Address } from "viem";
+import { createEthersClient, createEthersSdk } from "@matterlabs/zksync-js/ethers";
 
 import { wagmiConfig } from "@/data/wagmi";
 
@@ -24,6 +25,7 @@ export default (
   tokens: Ref<{ [tokenSymbol: string]: Token } | undefined>,
   balances: Ref<TokenAmount[]>
 ) => {
+  const { getL1VoidSigner } = useZkSyncWalletStore();
   let params: FeeEstimationParams | undefined;
 
   const gasLimit = ref<bigint | undefined>();
@@ -58,6 +60,7 @@ export default (
     bridgeAddress?: Address;
     overrides?: ethers.Overrides;
   }): Promise<bigint> => {
+    console.log("2estimating custom gas limit");
     const { ...tx } = transaction;
     if ((tx.to === null || tx.to === undefined) && (tx.from === null || tx.from === undefined)) {
       throw new Error("Withdrawal target address is undefined!");
@@ -115,8 +118,11 @@ export default (
       const [price, limit] = await Promise.all([
         retry(() => provider.getGasPrice()),
         retry(async () => {
+          console.log("estimating gas limit");
           const isCustomBridgeToken = !!token?.l2BridgeAddress;
+          console.log("isCustomBridgeToken", isCustomBridgeToken);
           if (isCustomBridgeToken) {
+            console.log("why why why");
             return getCustomGasLimit({
               from: params!.from,
               to: params!.to,
@@ -125,6 +131,7 @@ export default (
               bridgeAddress: token?.l2BridgeAddress as Address,
             });
           } else if (params!.isNativeToken && params!.assetId) {
+            console.log("why woudlnt you call quote");
             const assetData = AbiCoder.defaultAbiCoder().encode(
               ["uint256", "address", "address"],
               [params!.amount, params!.to, params!.tokenAddress]
@@ -159,7 +166,7 @@ export default (
               amount: tokenBalance,
             });
           } else {
-            return provider.estimateGasWithdraw({
+            return await provider.estimateGasWithdraw({
               from: params!.from,
               to: params!.to,
               token: params!.tokenAddress,

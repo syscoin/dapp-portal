@@ -1,4 +1,4 @@
-import { createEthersClient, createEthersSdk } from "@dutterbutter/zksync-sdk/ethers";
+import { createEthersClient, createEthersSdk } from "@matterlabs/zksync-js/ethers";
 import { $fetch } from "ofetch";
 
 import type { Api } from "@/types";

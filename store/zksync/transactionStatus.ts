@@ -1,4 +1,4 @@
-import { createEthersClient, createEthersSdk } from "@dutterbutter/zksync-sdk/ethers";
+import { createEthersClient, createEthersSdk } from "@matterlabs/zksync-js/ethers";
 import { useStorage } from "@vueuse/core";
 import { decodeEventLog } from "viem";
 import IZkSyncHyperchain from "zksync-ethers/abi/IZkSyncHyperchain.json";

@@ -1,4 +1,4 @@
-import { createEthersClient, createEthersSdk } from "@dutterbutter/zksync-sdk/ethers";
+import { createEthersClient, createEthersSdk } from "@matterlabs/zksync-js/ethers";
 import { readContract, writeContract } from "@wagmi/core";
 import { type BigNumberish } from "ethers";
 import { zeroAddress, type Address, type Hash } from "viem";

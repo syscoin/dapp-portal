@@ -3,8 +3,8 @@ import { getWalletClient, getPublicClient, prepareTransactionRequest, custom } f
 import { ethers, type BigNumberish, type ContractTransaction } from "ethers";
 import { createWalletClient, type Hash, type Address } from "viem";
 import { eip712WalletActions } from "viem/zksync";
-import { createEthersClient, createEthersSdk } from "@dutterbutter/zksync-sdk/ethers";
-import { L2_BASE_TOKEN_ADDRESS } from "@dutterbutter/zksync-sdk/core";
+import { createEthersClient, createEthersSdk } from "@matterlabs/zksync-js/ethers";
+import { L2_BASE_TOKEN_ADDRESS } from "@matterlabs/zksync-js/core";
 import { isCustomNode } from "@/data/networks";
 import { wagmiConfig } from "~/data/wagmi";
 

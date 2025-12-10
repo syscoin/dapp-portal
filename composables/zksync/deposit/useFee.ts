@@ -1,4 +1,4 @@
-import { createEthersClient, createEthersSdk } from "@dutterbutter/zksync-sdk/ethers";
+import { createEthersClient, createEthersSdk } from "@matterlabs/zksync-js/ethers";
 import { zeroAddress, type Address } from "viem";
 
 import { useSentryLogger } from "@/composables/useSentryLogger";
@@ -11,7 +11,7 @@ export type DepositFeeValues = {
   gasPerPubdata: bigint;
   baseCost: bigint;
   l1GasLimit: bigint;
-  l2GasLimit: bigint;
+  // l2GasLimit: bigint;
 };
 
 export default (tokens: Ref<Token[]>, balances: Ref<TokenAmount[] | undefined>) => {
@@ -62,7 +62,6 @@ export default (tokens: Ref<Token[]>, balances: Ref<TokenAmount[] | undefined>) 
           token: params.tokenAddress as Address,
           amount: BigInt(0n),
         });
-
         if (!quote.fees.gasLimit) {
           // Failed to estimate fee (e.g. 0 ETH balance)
           fee.value = undefined;
@@ -75,7 +74,6 @@ export default (tokens: Ref<Token[]>, balances: Ref<TokenAmount[] | undefined>) 
           gasPerPubdata: quote.gasPerPubdata,
           baseCost: quote.baseCost,
           l1GasLimit: quote.fees.gasLimit,
-          l2GasLimit: quote.suggestedL2GasLimit,
         };
       } catch (err) {
         captureException({
@@ -88,18 +86,6 @@ export default (tokens: Ref<Token[]>, balances: Ref<TokenAmount[] | undefined>) 
       }
 
       if (!fee.value) throw new Error("Fee estimation failed");
-
-      // Apply 130% buffer to EIP-1559 parameters
-      fee.value.maxFeePerGas = (fee.value.maxFeePerGas * 130n) / 100n;
-      if (fee.value.maxPriorityFeePerGas) {
-        fee.value.maxPriorityFeePerGas = (fee.value.maxPriorityFeePerGas * 130n) / 100n;
-      }
-      if (fee.value.l1GasLimit) {
-        fee.value.l1GasLimit = (fee.value.l1GasLimit * 130n) / 100n;
-      }
-
-      // Apply 130% buffer to baseCost to prevent MsgValueTooLow errors
-      fee.value.baseCost = (fee.value.baseCost * 130n) / 100n;
     },
     { cache: false }
   );

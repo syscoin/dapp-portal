@@ -1,4 +1,4 @@
-import { createEthersClient, createEthersSdk, createFinalizationServices } from "@dutterbutter/zksync-sdk/ethers";
+import { createEthersClient, createEthersSdk, createFinalizationServices } from "@matterlabs/zksync-js/ethers";
 
 import { useSentryLogger } from "../useSentryLogger";
 
