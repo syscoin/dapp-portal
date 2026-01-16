@@ -1,7 +1,7 @@
+import { createEthersClient, createEthersSdk } from "@matterlabs/zksync-js/ethers";
 import { estimateGas } from "@wagmi/core";
 import { AbiCoder } from "ethers";
 import { encodeFunctionData, type Address } from "viem";
-import { createEthersClient, createEthersSdk } from "@matterlabs/zksync-js/ethers";
 
 import { wagmiConfig } from "@/data/wagmi";
 

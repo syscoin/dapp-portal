@@ -103,23 +103,23 @@ export const useZkSyncTokensStore = defineStore("zkSyncTokens", () => {
       baseToken =
         baseTokenAddress === L2_BASE_TOKEN_ADDRESS
           ? {
-            address: L2_BASE_TOKEN_ADDRESS,
-            l1Address: utils.ETH_ADDRESS,
-            symbol: "ETH",
-            name: "Ether",
-            decimals: 18,
-            iconUrl: "/img/eth.svg",
-            isETH: true,
-          }
+              address: L2_BASE_TOKEN_ADDRESS,
+              l1Address: utils.ETH_ADDRESS,
+              symbol: "ETH",
+              name: "Ether",
+              decimals: 18,
+              iconUrl: "/img/eth.svg",
+              isETH: true,
+            }
           : {
-            address: L2_BASE_TOKEN_ADDRESS,
-            l1Address: baseTokenAddress,
-            symbol: "BASETOKEN",
-            name: "Base Token",
-            decimals: 18,
-            iconUrl: "/img/base.svg",
-            isETH: false,
-          };
+              address: L2_BASE_TOKEN_ADDRESS,
+              l1Address: baseTokenAddress,
+              symbol: "BASETOKEN",
+              name: "Base Token",
+              decimals: 18,
+              iconUrl: "/img/base.svg",
+              isETH: false,
+            };
     }
     if (!ethToken && !baseToken.isETH) {
       ethToken = {

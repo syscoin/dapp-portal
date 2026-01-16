@@ -41,7 +41,7 @@ export default (
     { cache: false }
   );
   console.log("useAllowance initialized");
-  
+
   const requestAllowance = async () => {
     if (
       accountAddress.value &&

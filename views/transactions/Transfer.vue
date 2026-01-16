@@ -333,7 +333,7 @@ const onboardStore = useOnboardStore();
 const walletStore = useZkSyncWalletStore();
 const tokensStore = useZkSyncTokensStore();
 const providerStore = useZkSyncProviderStore();
-const { account, isConnected } = storeToRefs(onboardStore);
+const { account } = storeToRefs(onboardStore);
 const { eraNetwork } = storeToRefs(providerStore);
 const { destinations } = storeToRefs(useDestinationsStore());
 const { tokens, tokensRequestInProgress, tokensRequestError } = storeToRefs(tokensStore);
@@ -362,9 +362,9 @@ const availableTokens = computed(() => {
   const list = getTokensWithCustomBridgeTokens(
     Object.values(tokens.value),
     AddressChainType.L2,
-    eraNetwork.value.lNetwork?.id
+    eraNetwork.value.l1Network?.id
   );
-  
+
   if (props.type === "withdrawal") {
     return list;
   }
@@ -778,8 +778,8 @@ const resetForm = () => {
 };
 
 const fetchBalances = async (force = false) => {
-  tokensStore.requestTokens();
-  if (!isConnected.value) return;
+  await tokensStore.requestTokens({ force });
+  if (!account.value.address) return;
 
   await walletStore.requestBalance({ force });
 };
@@ -787,7 +787,7 @@ fetchBalances();
 
 const unsubscribeFetchBalance = onboardStore.subscribeOnAccountChange((newAddress) => {
   if (!newAddress) return;
-  fetchBalances();
+  fetchBalances(true);
   resetFee();
   estimate();
 });

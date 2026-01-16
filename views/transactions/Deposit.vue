@@ -389,7 +389,7 @@ const tokensStore = useZkSyncTokensStore();
 const providerStore = useZkSyncProviderStore();
 const zkSyncEthereumBalance = useZkSyncEthereumBalanceStore();
 const eraWalletStore = useZkSyncWalletStore();
-const { account, isConnected, walletWarningDisabled } = storeToRefs(onboardStore);
+const { account, walletWarningDisabled } = storeToRefs(onboardStore);
 const { eraNetwork } = storeToRefs(providerStore);
 const { destinations } = storeToRefs(useDestinationsStore());
 const { l1BlockExplorerUrl } = storeToRefs(useNetworkStore());
@@ -785,8 +785,8 @@ const resetForm = () => {
 };
 
 const fetchBalances = async (force = false) => {
-  tokensStore.requestTokens();
-  if (!isConnected.value) return;
+  await tokensStore.requestTokens({ force });
+  if (!account.value.address) return;
 
   await zkSyncEthereumBalance.requestBalance({ force });
 };
@@ -794,7 +794,7 @@ fetchBalances();
 
 const unsubscribeFetchBalance = onboardStore.subscribeOnAccountChange((newAddress) => {
   if (!newAddress) return;
-  fetchBalances();
+  fetchBalances(true);
 });
 
 onBeforeUnmount(() => {
