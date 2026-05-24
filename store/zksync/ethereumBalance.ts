@@ -4,6 +4,8 @@ import { utils } from "zksync-ethers";
 import { l1Networks } from "@/data/networks";
 import { wagmiConfig } from "@/data/wagmi";
 import { getBalancesWithCustomBridgeTokens, AddressChainType } from "@/utils/helpers";
+import { fetchSyscoinBlockscoutTokenBalances, fetchSyscoinTokenRegistry } from "@/utils/syscoinBlockscout";
+import { isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
 
 import type { Hash, TokenAmount } from "@/types";
 
@@ -66,6 +68,46 @@ export const useZkSyncEthereumBalanceStore = defineStore("zkSyncEthereumBalances
       })
     );
   };
+  const getBalancesFromSyscoinBlockscout = async (): Promise<TokenAmount[]> => {
+    await tokensStore.requestTokens();
+    if (!l1Tokens.value) throw new Error("Tokens are not available");
+    if (!account.value.address) throw new Error("Account is not available");
+    if (!isSyscoinBridgeNetwork(selectedNetwork.value)) throw new Error("Syscoin bridge config is not available");
+
+    // SYSCOIN: deposits originate on L1, so discover ERC20 wallet balances
+    // from L1 Blockscout. TSYS native balance still comes from RPC.
+    const nativeToken = l1Tokens.value[utils.ETH_ADDRESS];
+    const nativeBalance = nativeToken
+      ? [
+          {
+            ...nativeToken,
+            amount: (
+              await getBalance(wagmiConfig, {
+                address: account.value.address!,
+                chainId: l1Network.value!.id,
+              })
+            ).value.toString(),
+          },
+        ]
+      : [];
+
+    const registry = await fetchSyscoinTokenRegistry();
+    const blockscoutBalances = await fetchSyscoinBlockscoutTokenBalances(
+      selectedNetwork.value.syscoinBridge.l1BlockscoutApiUrl,
+      account.value.address,
+      "L1",
+      registry.l1Tokens
+    );
+
+    const registryByL1 = new Map(registry.l1Tokens.map((token) => [token.address.toLowerCase(), token]));
+    const mappedBlockscoutBalances = blockscoutBalances.map((balance) => ({
+      ...balance,
+      ...registryByL1.get(balance.address.toLowerCase()),
+      amount: balance.amount,
+    }));
+
+    return [...nativeBalance, ...mappedBlockscoutBalances];
+  };
   const {
     result: balance,
     inProgress: balanceInProgress,
@@ -76,7 +118,10 @@ export const useZkSyncEthereumBalanceStore = defineStore("zkSyncEthereumBalances
     async () => {
       if (!l1Network.value) throw new Error(`L1 network is not available on ${selectedNetwork.value.name}`);
 
-      if (
+      if (isSyscoinBridgeNetwork(selectedNetwork.value)) {
+        const blockscoutBalances = await getBalancesFromSyscoinBlockscout();
+        return getBalancesWithCustomBridgeTokens(blockscoutBalances, AddressChainType.L1);
+      } else if (
         ([l1Networks.mainnet.id, l1Networks.sepolia.id] as number[]).includes(l1Network.value?.id) &&
         portalRuntimeConfig.ankrToken
       ) {

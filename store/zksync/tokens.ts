@@ -2,6 +2,7 @@ import { $fetch } from "ofetch";
 import { utils } from "zksync-ethers";
 
 import { customBridgeTokens } from "@/data/customBridgeTokens";
+import { fetchSyscoinTokenRegistry } from "@/utils/syscoinBlockscout";
 import { isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
 
 import type { Api, Token } from "@/types";
@@ -17,10 +18,10 @@ export const useZkSyncTokensStore = defineStore("zkSyncTokens", () => {
     execute: requestTokens,
     reset: resetTokens,
   } = usePromise<Token[]>(async () => {
-    // SYSCOIN: Tanenbaum does not rely on zksync-ethers token discovery.
-    // Use explicit network token config and avoid SDK RPC calls here.
     if (isSyscoinBridgeNetwork(eraNetwork.value)) {
-      return (await eraNetwork.value.getTokens?.()) ?? [];
+      // SYSCOIN: global token discovery and L1->L2 mapping resolution are
+      // server-cached. The client only renders the normalized registry.
+      return (await fetchSyscoinTokenRegistry()).l2Tokens;
     }
 
     const provider = await providerStore.requestProvider();

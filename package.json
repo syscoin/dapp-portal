@@ -20,7 +20,7 @@
     "prepare": "husky install",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --ignore-path .eslintignore --no-error-on-unmatched-pattern --max-warnings=2",
     "lint:fix": "npm run lint -- --fix",
-    "test:syscoin": "vitest run tests/syscoinBridge.test.ts"
+    "test:syscoin": "vitest run tests/syscoinBridge.test.ts tests/syscoinBlockscout.test.ts"
   },
   "devDependencies": {
     "@commitlint/cli": "^17.4.2",
