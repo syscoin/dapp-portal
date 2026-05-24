@@ -174,8 +174,10 @@ export default (tokens: Ref<Token[]>, balances: Ref<TokenAmount[] | undefined>) 
         }
       }
 
-      // Apply 130% buffer to baseCost to prevent MsgValueTooLow errors
-      if (fee.value?.baseCost) {
+      // Apply 130% buffer to baseCost to prevent MsgValueTooLow errors.
+      // SYSCOIN: direct Bridgehub fee estimation already uses a buffered gas
+      // price before l2TransactionBaseCost, so do not compound the margin here.
+      if (fee.value?.baseCost && !isSyscoinBridgeNetwork(eraNetwork.value)) {
         fee.value.baseCost = (fee.value.baseCost * 130n) / 100n;
       }
     },
