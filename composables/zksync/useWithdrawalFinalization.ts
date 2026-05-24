@@ -5,6 +5,7 @@ import { IL1AssetRouter__factory as IL1AssetRouterFactory } from "zksync-ethers/
 
 import { L1_BRIDGE_ABI } from "@/data/abis/l1BridgeAbi";
 import { customBridgeTokens } from "@/data/customBridgeTokens";
+import { SYSCOIN_L1_NULLIFIER_ABI, isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
 
 import { useSentryLogger } from "../useSentryLogger";
 
@@ -27,6 +28,10 @@ export default (transactionInfo: ComputedRef<TransactionInfo>) => {
     providerStore.requestProvider().then((provider) => provider.getDefaultBridgeAddresses())
   );
   const retrieveL1NullifierAddress = useMemoize(async () => {
+    // SYSCOIN: Tanenbaum exposes the canonical L1 nullifier in network config.
+    if (isSyscoinBridgeNetwork(providerStore.eraNetwork)) {
+      return providerStore.eraNetwork.syscoinBridge.l1NullifierAddress;
+    }
     const providerL1 = await walletStore.getL1VoidSigner();
     return await IL1AssetRouterFactory.connect((await retrieveBridgeAddresses()).sharedL1, providerL1).L1_NULLIFIER();
   });
@@ -108,7 +113,7 @@ export default (transactionInfo: ComputedRef<TransactionInfo>) => {
 
       return {
         address: (await retrieveL1NullifierAddress()) as Hash,
-        abi: IL1Nullifier,
+        abi: isSyscoinBridgeNetwork(providerStore.eraNetwork) ? SYSCOIN_L1_NULLIFIER_ABI : IL1Nullifier,
         account: onboardStore.account.address!,
         functionName: "finalizeDeposit",
         args: [finalizeDepositParams],

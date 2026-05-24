@@ -401,6 +401,7 @@ import useFee from "@/composables/zksync/deposit/useFee";
 import useTransaction from "@/composables/zksync/deposit/useTransaction";
 import { customBridgeTokens } from "@/data/customBridgeTokens";
 import { isCustomNode } from "@/data/networks";
+import { isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
 import DepositSubmitted from "@/views/transactions/DepositSubmitted.vue";
 
 import type { Token, TokenAmount } from "@/types";
@@ -515,7 +516,11 @@ const {
 } = useAllowance(
   computed(() => account.value.address),
   computed(() => selectedToken.value?.address),
-  async () => (await providerStore.requestProvider().then((provider) => provider.getDefaultBridgeAddresses())).sharedL1,
+  async () => {
+    // SYSCOIN: ERC20 deposits approve the canonical L1 AssetRouter/shared bridge.
+    if (isSyscoinBridgeNetwork(eraNetwork.value)) return eraNetwork.value.syscoinBridge.sharedBridgeAddress;
+    return (await providerStore.requestProvider().then((provider) => provider.getDefaultBridgeAddresses())).sharedL1;
+  },
   eraWalletStore.getL1Signer
 );
 const enoughAllowance = computedAsync(async () => {

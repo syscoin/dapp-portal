@@ -25,6 +25,7 @@ import TransactionsView from "@/views/on-ramp/TransactionsView.vue";
 import type { Address } from "viem";
 
 const route = useRoute();
+const { selectedNetwork } = storeToRefs(useNetworkStore());
 
 const DEFAULT_FIAT_AMOUNT = (route.query.amount as string) ?? "100";
 
@@ -33,6 +34,12 @@ const { reset } = useOnRampStore();
 const { account, isConnected } = storeToRefs(useOnboardStore());
 const { reset: resetQuotes } = useQuotesStore();
 onMounted(() => {
+  // SYSCOIN: Tanenbaum does not have a verified Easy On-Ramp provider path.
+  // Keep the integration disabled instead of routing users to ZKsync assets.
+  if (!selectedNetwork.value.displaySettings?.onramp) {
+    navigateTo({ name: "assets" });
+    return;
+  }
   reset();
   resetQuotes();
 });

@@ -2,6 +2,7 @@ import { mainnet, sepolia } from "@wagmi/core/chains";
 
 import Hyperchains from "@/hyperchains/config.json";
 import { type Config } from "@/scripts/hyperchains/common";
+import { L2_BASE_TOKEN_ADDRESS } from "@/utils/constants";
 
 import type { Token } from "@/types";
 import type { Chain } from "@wagmi/core/chains";
@@ -31,6 +32,22 @@ export const l1Networks = {
       },
     },
   },
+  tanenbaum: {
+    id: 5700,
+    name: "Syscoin Tanenbaum",
+    network: "tanenbaum",
+    nativeCurrency: { name: "Tanenbaum Syscoin", symbol: "TSYS", decimals: 18 },
+    rpcUrls: {
+      default: { http: ["https://rpc.tanenbaum.io"] },
+      public: { http: ["https://rpc.tanenbaum.io"] },
+    },
+    blockExplorers: {
+      default: {
+        name: "Syscoin Tanenbaum Explorer",
+        url: "https://explorer.tanenbaum.io",
+      },
+    },
+  },
 } as const;
 export type L1Network = Chain;
 
@@ -51,6 +68,14 @@ export type ZkSyncNetwork = {
   };
   nativeCurrency?: { name: string; symbol: string; decimals: number };
   nativeTokenBridgingOnly?: boolean;
+  // SYSCOIN: networks with this config use direct OS/Gateway bridge calls
+  // instead of zksync-ethers bridge helpers.
+  syscoinBridge?: {
+    gatewayRpcUrl: string;
+    bridgehubAddress: `0x${string}`;
+    sharedBridgeAddress: `0x${string}`;
+    l1NullifierAddress: `0x${string}`;
+  };
   getTokens?: () => Token[] | Promise<Token[]>; // If blockExplorerApi is specified, tokens will be fetched from there. Otherwise, this function will be used.
   isPrividium?: boolean;
 };
@@ -164,6 +189,40 @@ const publicChains: ZkSyncNetwork[] = [
       decimals: 18,
     },
     nativeTokenBridgingOnly: true,
+  },
+  {
+    id: 57057,
+    key: "syscoin-tanenbaum-zksys",
+    name: "Syscoin Tanenbaum zksys",
+    rpcUrl: "https://rpc-zk.tanenbaum.io",
+    l1Network: l1Networks.tanenbaum,
+    displaySettings: {
+      onramp: false,
+      showPartnerLinks: false,
+      isTestnet: true,
+    },
+    nativeCurrency: {
+      name: "Tanenbaum Syscoin",
+      symbol: "TSYS",
+      decimals: 18,
+    },
+    syscoinBridge: {
+      gatewayRpcUrl: "https://rpc-gw.tanenbaum.io",
+      bridgehubAddress: "0x9ea2670685a2e3534bdaa114e1cb619ea5cf624f",
+      sharedBridgeAddress: "0xc769c7b29543393f2e2cb209a07721b62cdd94fa",
+      l1NullifierAddress: "0xa7d7381b7fb1ff64600d7a7215ddf2286a1c84ee",
+    },
+    getTokens: () => [
+      {
+        address: L2_BASE_TOKEN_ADDRESS,
+        l1Address: "0x0000000000000000000000000000000000000000",
+        symbol: "TSYS",
+        name: "Tanenbaum Syscoin",
+        decimals: 18,
+        iconUrl: "/img/eth.svg",
+        isETH: true,
+      },
+    ],
   },
   {
     id: 300,

@@ -6,6 +6,12 @@ import { eip712WalletActions } from "viem/zksync";
 import { EIP712_TX_TYPE } from "zksync-ethers/build/utils";
 
 import { isCustomNode } from "@/data/networks";
+import { L2_ASSET_ROUTER_ADDRESS, L2_BASE_TOKEN_ADDRESS } from "@/utils/constants";
+import {
+  buildSyscoinErc20WithdrawData,
+  buildSyscoinL2BaseTokenWithdrawData,
+  isSyscoinBridgeNetwork,
+} from "@/utils/syscoinBridge";
 import { wagmiConfig } from "~/data/wagmi";
 
 import { useSentryLogger } from "../useSentryLogger";
@@ -101,6 +107,31 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
       await validateAddress(transaction.to);
 
       status.value = "waiting-for-signature";
+
+      // SYSCOIN: route withdrawals through OS system contracts directly.
+      // Base token withdrawal sends TSYS as msg.value to 0x800a; ERC20 withdrawal
+      // calls the L2 AssetRouter. Finalization remains an L1 nullifier call.
+      if (transaction.type === "withdrawal" && isSyscoinBridgeNetwork(selectedNetwork.value)) {
+        const isBaseToken = transaction.tokenAddress.toUpperCase() === L2_BASE_TOKEN_ADDRESS.toUpperCase();
+        const txResponse = await signer.sendTransaction({
+          from: accountAddress,
+          to: isBaseToken ? L2_BASE_TOKEN_ADDRESS : L2_ASSET_ROUTER_ADDRESS,
+          data: isBaseToken
+            ? buildSyscoinL2BaseTokenWithdrawData(transaction.to as `0x${string}`)
+            : buildSyscoinErc20WithdrawData(
+                transaction.to as `0x${string}`,
+                transaction.tokenAddress as `0x${string}`,
+                BigInt(transaction.amount.toString())
+              ),
+          value: isBaseToken ? transaction.amount : 0,
+          gasPrice: fee.gasPrice,
+          gasLimit: fee.gasLimit,
+        } as ethers.TransactionRequest);
+
+        transactionHash.value = txResponse.hash;
+        status.value = "done";
+        return txResponse;
+      }
 
       if (transaction.bridgeAddress && transaction.type !== "transfer") {
         const txRequest = await getCustomWithdrawTx({
