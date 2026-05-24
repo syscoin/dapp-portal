@@ -89,16 +89,6 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
 
       accountAddress = await signer.getAddress();
 
-      const provider = await getProvider();
-
-      const getRequiredBridgeAddress = async () => {
-        if (transaction.bridgeAddress) return transaction.bridgeAddress;
-        if (transaction.tokenAddress === L2_BASE_TOKEN_ADDRESS) return undefined;
-        const bridgeAddresses = await retrieveBridgeAddresses();
-        return bridgeAddresses.sharedL2;
-      };
-      const bridgeAddress = transaction.type === "withdrawal" ? await getRequiredBridgeAddress() : undefined;
-
       await eraWalletStore.walletAddressValidate();
       await validateAddress(transaction.to);
 
@@ -124,6 +114,15 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
         status.value = "done";
         return txResponse;
       }
+
+      const provider = await getProvider();
+      const getRequiredBridgeAddress = async () => {
+        if (transaction.bridgeAddress) return transaction.bridgeAddress;
+        if (transaction.tokenAddress === L2_BASE_TOKEN_ADDRESS) return undefined;
+        const bridgeAddresses = await retrieveBridgeAddresses();
+        return bridgeAddresses.sharedL2;
+      };
+      const bridgeAddress = transaction.type === "withdrawal" ? await getRequiredBridgeAddress() : undefined;
 
       if (transaction.bridgeAddress && transaction.type !== "transfer") {
         const txRequest = await getCustomWithdrawTx({
