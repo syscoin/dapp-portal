@@ -6,6 +6,8 @@ import { eip712WalletActions } from "viem/zksync";
 import { EIP712_TX_TYPE } from "zksync-ethers/build/utils";
 
 import { isCustomNode } from "@/data/networks";
+import { L2_BASE_TOKEN_ADDRESS } from "@/utils/constants";
+import { buildSyscoinWithdrawTransaction, isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
 import { wagmiConfig } from "~/data/wagmi";
 
 import { useSentryLogger } from "../useSentryLogger";
@@ -87,8 +89,33 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
 
       accountAddress = await signer.getAddress();
 
-      const provider = await getProvider();
+      await eraWalletStore.walletAddressValidate();
+      await validateAddress(transaction.to);
 
+      status.value = "waiting-for-signature";
+
+      // SYSCOIN: route withdrawals through OS system contracts directly.
+      // Base token withdrawal sends TSYS as msg.value to 0x800a; ERC20 withdrawal
+      // calls the L2 AssetRouter. Finalization remains an L1 nullifier call.
+      if (transaction.type === "withdrawal" && isSyscoinBridgeNetwork(selectedNetwork.value)) {
+        const syscoinWithdrawTx = buildSyscoinWithdrawTransaction({
+          l1Receiver: transaction.to as `0x${string}`,
+          l2Token: transaction.tokenAddress as `0x${string}`,
+          amount: BigInt(transaction.amount.toString()),
+        });
+        const txResponse = await signer.sendTransaction({
+          from: accountAddress,
+          ...syscoinWithdrawTx,
+          gasPrice: fee.gasPrice,
+          gasLimit: fee.gasLimit,
+        } as ethers.TransactionRequest);
+
+        transactionHash.value = txResponse.hash;
+        status.value = "done";
+        return txResponse;
+      }
+
+      const provider = await getProvider();
       const getRequiredBridgeAddress = async () => {
         if (transaction.bridgeAddress) return transaction.bridgeAddress;
         if (transaction.tokenAddress === L2_BASE_TOKEN_ADDRESS) return undefined;
@@ -96,11 +123,6 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
         return bridgeAddresses.sharedL2;
       };
       const bridgeAddress = transaction.type === "withdrawal" ? await getRequiredBridgeAddress() : undefined;
-
-      await eraWalletStore.walletAddressValidate();
-      await validateAddress(transaction.to);
-
-      status.value = "waiting-for-signature";
 
       if (transaction.bridgeAddress && transaction.type !== "transfer") {
         const txRequest = await getCustomWithdrawTx({

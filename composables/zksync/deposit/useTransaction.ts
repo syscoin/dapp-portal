@@ -1,11 +1,18 @@
 import { readContract, writeContract } from "@wagmi/core";
-import { zeroAddress, type Address, type Hash } from "viem";
+import { getAddress, zeroAddress, type Address, type Hash } from "viem";
 import { L1Signer } from "zksync-ethers";
 import { getERC20DefaultBridgeData, REQUIRED_L1_TO_L2_GAS_PER_PUBDATA_LIMIT } from "zksync-ethers/build/utils";
 
 import { useSentryLogger } from "@/composables/useSentryLogger";
 import { L1_BRIDGE_ABI } from "@/data/abis/l1BridgeAbi";
 import { wagmiConfig } from "@/data/wagmi";
+import {
+  SYSCOIN_BRIDGEHUB_ABI,
+  buildSyscoinErc20DepositRequest,
+  buildSyscoinTsysDepositRequest,
+  isSyscoinBridgeNetwork,
+  isSyscoinNativeToken,
+} from "@/utils/syscoinBridge";
 
 import type { DepositFeeValues } from "@/composables/zksync/deposit/useFee";
 import type { BigNumberish } from "ethers";
@@ -15,6 +22,7 @@ export default (getL1Signer: () => Promise<L1Signer | undefined>) => {
   const error = ref<Error | undefined>();
   const ethTransactionHash = ref<Hash | undefined>();
   const eraWalletStore = useZkSyncWalletStore();
+  const { eraNetwork } = storeToRefs(useZkSyncProviderStore());
   const { captureException } = useSentryLogger();
 
   const { validateAddress } = useScreening();
@@ -129,7 +137,66 @@ export default (getL1Signer: () => Promise<L1Signer | undefined>) => {
 
       status.value = "waiting-for-signature";
 
-      if (transaction.bridgeAddress) {
+      // SYSCOIN: Tanenbaum uses the OS Bridgehub flow directly; this avoids
+      // zksync-ethers deposit helpers that require zks_estimateGasL1ToL2.
+      if (isSyscoinBridgeNetwork(eraNetwork.value)) {
+        const amount = BigInt(transaction.amount.toString());
+        const baseCost = fee.baseCost ?? 0n;
+        const commonWriteParams = overrides.gasPrice
+          ? { gas: fee.l1GasLimit, gasPrice: overrides.gasPrice, type: "legacy" as const }
+          : {
+              gas: fee.l1GasLimit,
+              maxFeePerGas: overrides.maxFeePerGas,
+              maxPriorityFeePerGas: overrides.maxPriorityFeePerGas,
+            };
+        const hash = isSyscoinNativeToken(transaction.tokenAddress)
+          ? await writeContract(wagmiConfig, {
+              address: eraNetwork.value.syscoinBridge.bridgehubAddress,
+              abi: SYSCOIN_BRIDGEHUB_ABI,
+              functionName: "requestL2TransactionDirect",
+              args: [
+                buildSyscoinTsysDepositRequest({
+                  chainId: eraNetwork.value.id,
+                  l2Receiver: transaction.to,
+                  amount,
+                  baseCost,
+                  l2GasLimit: fee.l2GasLimit,
+                  refundRecipient: getAddress(wallet.address) as Address,
+                }),
+              ],
+              value: baseCost + amount,
+              ...commonWriteParams,
+            })
+          : await writeContract(wagmiConfig, {
+              address: eraNetwork.value.syscoinBridge.bridgehubAddress,
+              abi: SYSCOIN_BRIDGEHUB_ABI,
+              functionName: "requestL2TransactionTwoBridges",
+              args: [
+                buildSyscoinErc20DepositRequest({
+                  chainId: eraNetwork.value.id,
+                  l1Token: transaction.tokenAddress,
+                  amount,
+                  l2Receiver: transaction.to,
+                  baseCost,
+                  sharedBridgeAddress: eraNetwork.value.syscoinBridge.sharedBridgeAddress,
+                  l2GasLimit: fee.l2GasLimit,
+                  refundRecipient: getAddress(wallet.address) as Address,
+                }),
+              ],
+              value: baseCost,
+              ...commonWriteParams,
+            });
+
+        ethTransactionHash.value = hash;
+        status.value = "done";
+        return {
+          from: wallet.address,
+          to: transaction.to,
+          hash,
+          // eslint-disable-next-line require-await
+          wait: async () => ({ from: wallet.address, to: transaction.to, hash }),
+        };
+      } else if (transaction.bridgeAddress) {
         const depositResponse = await handleCustomBridgeDeposit(
           { ...transaction, bridgeAddress: transaction.bridgeAddress },
           fee

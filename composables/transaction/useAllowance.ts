@@ -1,5 +1,9 @@
+import { writeContract } from "@wagmi/core";
 import { L1Signer, utils } from "zksync-ethers";
 import IERC20 from "zksync-ethers/abi/IERC20.json";
+
+import { wagmiConfig } from "@/data/wagmi";
+import { isSyscoinBridgeNetwork, isSyscoinNativeToken } from "@/utils/syscoinBridge";
 
 import { useSentryLogger } from "../useSentryLogger";
 
@@ -14,6 +18,7 @@ export default (
   getL1Signer: () => Promise<L1Signer | undefined>
 ) => {
   const { getPublicClient } = useOnboardStore();
+  const { eraNetwork } = storeToRefs(useZkSyncProviderStore());
   const { captureException } = useSentryLogger();
   const {
     result,
@@ -75,9 +80,18 @@ export default (
         const receipts = [];
 
         for (let i = 0; i < approvalAmounts.length; i++) {
-          const txResponse = await wallet?.approveERC20(approvalAmounts[i].token, approvalAmounts[i].allowance);
+          // SYSCOIN: approve the canonical L1 AssetRouter directly. The
+          // zksync-ethers helper resolves Era bridge addresses internally.
+          const txHash = isSyscoinBridgeNetwork(eraNetwork.value)
+            ? await writeContract(wagmiConfig, {
+                address: approvalAmounts[i].token as Hash,
+                abi: IERC20,
+                functionName: "approve",
+                args: [contractAddress as Hash, approvalAmounts[i].allowance],
+              })
+            : ((await wallet?.approveERC20(approvalAmounts[i].token, approvalAmounts[i].allowance))?.hash as Hash);
 
-          setAllowanceTransactionHashes.value.push(txResponse?.hash as Hash);
+          setAllowanceTransactionHashes.value.push(txHash as Hash);
 
           setAllowanceStatus.value = "sending";
 
@@ -116,6 +130,15 @@ export default (
     { cache: false }
   );
   const getApprovalAmounts = async (amount: BigNumberish, fee: DepositFeeValues) => {
+    if (isSyscoinBridgeNetwork(eraNetwork.value)) {
+      if (!tokenAddress.value || isSyscoinNativeToken(tokenAddress.value)) {
+        approvalAmounts = [];
+        return approvalAmounts;
+      }
+      approvalAmounts = [{ token: tokenAddress.value as Hash, allowance: BigInt(amount.toString()) }];
+      return approvalAmounts;
+    }
+
     const wallet = await getL1Signer();
     if (!wallet) throw new Error("Wallet is not available");
 

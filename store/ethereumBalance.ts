@@ -1,9 +1,11 @@
 import { AnkrProvider } from "@ankr.com/ankr.js";
+import { getBalance } from "@wagmi/core";
 import { utils } from "zksync-ethers";
 
 import { l1Networks } from "@/data/networks";
+import { wagmiConfig } from "@/data/wagmi";
 
-import type { Token, TokenAmount } from "@/types";
+import type { Hash, Token, TokenAmount } from "@/types";
 import type { Blockchain as AnkrSupportedChains } from "@ankr.com/ankr.js";
 
 export const useEthereumBalanceStore = defineStore("ethereumBalance", () => {
@@ -40,7 +42,26 @@ export const useEthereumBalanceStore = defineStore("ethereumBalance", () => {
         [l1Networks.sepolia.id, "eth_sepolia"],
       ]);
       if (!networkIdToAnkr.has(eraNetwork.value.l1Network.id)) {
-        throw new Error(`Ankr does not support ${eraNetwork.value.l1Network.name}`);
+        // SYSCOIN: Tanenbaum is not supported by Ankr. Fall back to direct
+        // RPC balance reads for tokens declared in the network config.
+        return await Promise.all(
+          configTokens
+            .filter((token) => token.l1Address)
+            .map(async (token) => {
+              const l1Address = token.l1Address!;
+              const amount = await getBalance(wagmiConfig, {
+                address: account.value.address!,
+                chainId: eraNetwork.value.l1Network!.id,
+                token: l1Address.toUpperCase() === utils.ETH_ADDRESS.toUpperCase() ? undefined : (l1Address as Hash),
+              });
+              return {
+                ...token,
+                address: l1Address,
+                l1Address: undefined,
+                amount: amount.value.toString(),
+              } as TokenAmount;
+            })
+        );
       }
       const balances = await ankrProvider.getAccountBalance({
         blockchain: [networkIdToAnkr.get(eraNetwork.value.l1Network.id)!] as AnkrSupportedChains[],

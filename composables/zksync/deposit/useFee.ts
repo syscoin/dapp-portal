@@ -2,6 +2,13 @@ import { parseEther } from "ethers";
 import { utils } from "zksync-ethers";
 
 import { useSentryLogger } from "@/composables/useSentryLogger";
+import {
+  SYSCOIN_BRIDGEHUB_ABI,
+  SYSCOIN_DEFAULT_L1_DEPOSIT_GAS_LIMIT,
+  SYSCOIN_DEFAULT_L2_GAS_LIMIT,
+  SYSCOIN_REQUIRED_L1_TO_L2_GAS_PER_PUBDATA_BYTE,
+  isSyscoinBridgeNetwork,
+} from "@/utils/syscoinBridge";
 
 import type { Token, TokenAmount } from "@/types";
 import type { BigNumberish } from "ethers";
@@ -18,7 +25,9 @@ export type DepositFeeValues = {
 export default (tokens: Ref<Token[]>, balances: Ref<TokenAmount[] | undefined>) => {
   const { getPublicClient } = useOnboardStore();
   const { getL1VoidSigner } = useZkSyncWalletStore();
-  const { requestProvider } = useZkSyncProviderStore();
+  const providerStore = useZkSyncProviderStore();
+  const { eraNetwork } = storeToRefs(providerStore);
+  const { requestProvider } = providerStore;
   const { captureException } = useSentryLogger();
 
   let params = {
@@ -35,12 +44,22 @@ export default (tokens: Ref<Token[]>, balances: Ref<TokenAmount[] | undefined>) 
     if (fee.value.l1GasLimit && fee.value.maxFeePerGas && fee.value.maxPriorityFeePerGas) {
       return String(fee.value.l1GasLimit * fee.value.maxFeePerGas + (fee.value.baseCost || 0n));
     } else if (fee.value.l1GasLimit && fee.value.gasPrice) {
-      return calculateFee(fee.value.l1GasLimit, fee.value.gasPrice).toString();
+      return (calculateFee(fee.value.l1GasLimit, fee.value.gasPrice) + (fee.value.baseCost || 0n)).toString();
     }
     return undefined;
   });
 
   const feeToken = computed(() => {
+    // SYSCOIN: TSYS is the native fee token on Tanenbaum and is represented by
+    // the zero L1 token address in bridge forms.
+    if (isSyscoinBridgeNetwork(eraNetwork.value)) {
+      return tokens.value.find((e) => {
+        return (
+          e.address.toLowerCase() === utils.ETH_ADDRESS.toLowerCase() ||
+          e.l1Address?.toLowerCase() === utils.ETH_ADDRESS.toLowerCase()
+        );
+      });
+    }
     return tokens.value.find((e) => e.address.toUpperCase() === utils.ETH_ADDRESS.toUpperCase());
   });
   const enoughBalanceToCoverFee = computed(() => {
@@ -74,6 +93,29 @@ export default (tokens: Ref<Token[]>, balances: Ref<TokenAmount[] | undefined>) 
   const getGasPrice = async () => {
     return (BigInt(await retry(() => getPublicClient().getGasPrice())) * 130n) / 100n;
   };
+  const getSyscoinTransactionFee = async () => {
+    const gasPrice = await getGasPrice();
+    const baseCost = await retry(() =>
+      getPublicClient().readContract({
+        address: eraNetwork.value.syscoinBridge!.bridgehubAddress,
+        abi: SYSCOIN_BRIDGEHUB_ABI,
+        functionName: "l2TransactionBaseCost",
+        args: [
+          BigInt(eraNetwork.value.id),
+          gasPrice,
+          SYSCOIN_DEFAULT_L2_GAS_LIMIT,
+          SYSCOIN_REQUIRED_L1_TO_L2_GAS_PER_PUBDATA_BYTE,
+        ],
+      })
+    );
+
+    return {
+      gasPrice,
+      baseCost,
+      l1GasLimit: SYSCOIN_DEFAULT_L1_DEPOSIT_GAS_LIMIT,
+      l2GasLimit: SYSCOIN_DEFAULT_L2_GAS_LIMIT,
+    };
+  };
   const {
     inProgress,
     error,
@@ -84,14 +126,19 @@ export default (tokens: Ref<Token[]>, balances: Ref<TokenAmount[] | undefined>) 
       recommendedBalance.value = undefined;
       if (!feeToken.value) throw new Error("Fee tokens is not available");
 
-      const provider = await requestProvider();
-      const isEthBasedChain = await provider.isEthBasedChain();
-
       try {
-        if (isEthBasedChain && params.tokenAddress === feeToken.value?.address) {
-          fee.value = await getEthTransactionFee();
+        // SYSCOIN: zksync-os-server does not expose zks_estimateGasL1ToL2;
+        // use Bridgehub.l2TransactionBaseCost directly for Tanenbaum.
+        if (isSyscoinBridgeNetwork(eraNetwork.value)) {
+          fee.value = await getSyscoinTransactionFee();
         } else {
-          fee.value = getERC20TransactionFee();
+          const provider = await requestProvider();
+          const isEthBasedChain = await provider.isEthBasedChain();
+          if (isEthBasedChain && params.tokenAddress === feeToken.value?.address) {
+            fee.value = await getEthTransactionFee();
+          } else {
+            fee.value = getERC20TransactionFee();
+          }
         }
       } catch (err) {
         const message = (err as any)?.message;
@@ -114,7 +161,7 @@ export default (tokens: Ref<Token[]>, balances: Ref<TokenAmount[] | undefined>) 
         throw err;
       }
       /* It can be either maxFeePerGas or gasPrice */
-      if (fee.value && !fee.value?.maxFeePerGas) {
+      if (fee.value && !fee.value?.maxFeePerGas && !fee.value.gasPrice) {
         fee.value.gasPrice = await getGasPrice();
       } else if (fee.value?.maxFeePerGas) {
         // Apply 130% buffer to EIP-1559 parameters
@@ -127,8 +174,10 @@ export default (tokens: Ref<Token[]>, balances: Ref<TokenAmount[] | undefined>) 
         }
       }
 
-      // Apply 130% buffer to baseCost to prevent MsgValueTooLow errors
-      if (fee.value?.baseCost) {
+      // Apply 130% buffer to baseCost to prevent MsgValueTooLow errors.
+      // SYSCOIN: direct Bridgehub fee estimation already uses a buffered gas
+      // price before l2TransactionBaseCost, so do not compound the margin here.
+      if (fee.value?.baseCost && !isSyscoinBridgeNetwork(eraNetwork.value)) {
         fee.value.baseCost = (fee.value.baseCost * 130n) / 100n;
       }
     },
