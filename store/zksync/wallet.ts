@@ -4,6 +4,8 @@ import { L1Signer, L1VoidSigner, BrowserProvider, Signer } from "zksync-ethers";
 
 import { customBridgeTokens } from "@/data/customBridgeTokens";
 import { getBalancesWithCustomBridgeTokens, AddressChainType } from "@/utils/helpers";
+import { fetchSyscoinBlockscoutTokenBalances, fetchSyscoinTokenRegistry } from "@/utils/syscoinBlockscout";
+import { isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
 
 import type { Api, TokenAmount } from "@/types";
 import type { BigNumberish } from "ethers";
@@ -123,6 +125,42 @@ export const useZkSyncWalletStore = defineStore("zkSyncWallet", () => {
       return balance;
     });
   };
+  const getBalancesFromSyscoinBlockscout = async (): Promise<TokenAmount[]> => {
+    await tokensStore.requestTokens();
+    if (!tokens.value) throw new Error("Tokens are not available");
+    if (!account.value.address) throw new Error("Account is not available");
+    if (!isSyscoinBridgeNetwork(eraNetwork.value)) throw new Error("Syscoin bridge config is not available");
+
+    // SYSCOIN: L2 Blockscout lists L2-created and bridged ERC20 balances for
+    // transfer views. Withdraw views already filter to tokens with l1Address.
+    const provider = await providerStore.requestProvider();
+    const baseToken = tokens.value[L2_BASE_TOKEN_ADDRESS];
+    const nativeBalance = baseToken
+      ? [
+          {
+            ...baseToken,
+            amount: (await provider.getBalance(account.value.address)).toString(),
+          },
+        ]
+      : [];
+
+    const registry = await fetchSyscoinTokenRegistry();
+    const blockscoutBalances = await fetchSyscoinBlockscoutTokenBalances(
+      eraNetwork.value.syscoinBridge.l2BlockscoutApiUrl,
+      account.value.address,
+      "L2",
+      registry.l2Tokens
+    );
+
+    const registryByL2 = new Map(registry.l2Tokens.map((token) => [token.address.toLowerCase(), token]));
+    const mappedBlockscoutBalances = blockscoutBalances.map((balance) => ({
+      ...balance,
+      ...registryByL2.get(balance.address.toLowerCase()),
+      amount: balance.amount,
+    }));
+
+    return [...nativeBalance, ...mappedBlockscoutBalances];
+  };
   const {
     result: balancesResult,
     inProgress: balanceInProgress,
@@ -131,7 +169,9 @@ export const useZkSyncWalletStore = defineStore("zkSyncWallet", () => {
     reset: resetBalance,
   } = usePromise<TokenAmount[]>(
     async () => {
-      if (eraNetwork.value.blockExplorerApi) {
+      if (isSyscoinBridgeNetwork(eraNetwork.value)) {
+        return await getBalancesFromSyscoinBlockscout();
+      } else if (eraNetwork.value.blockExplorerApi) {
         return await getBalancesFromBlockExplorerApi();
       } else {
         return await getBalancesFromRPC();
