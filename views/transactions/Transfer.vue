@@ -371,9 +371,17 @@ const destination = computed(() => (props.type === "transfer" ? destinations.val
 const availableTokens = computed(() => {
   if (!tokens.value) return [];
   if (props.type === "withdrawal") {
-    return getTokensWithCustomBridgeTokens(Object.values(tokens.value), AddressChainType.L2).filter((e) => e.l1Address);
+    return getTokensWithCustomBridgeTokens(
+      Object.values(tokens.value),
+      AddressChainType.L2,
+      eraNetwork.value.l1Network?.id
+    ).filter((e) => e.l1Address);
   }
-  return getTokensWithCustomBridgeTokens(Object.values(tokens.value), AddressChainType.L2);
+  return getTokensWithCustomBridgeTokens(
+    Object.values(tokens.value),
+    AddressChainType.L2,
+    eraNetwork.value.l1Network?.id
+  );
 });
 const availableBalances = computed(() => {
   if (props.type === "withdrawal") {
