@@ -11,6 +11,7 @@ import {
   buildSyscoinErc20WithdrawData,
   buildSyscoinL2BaseTokenWithdrawData,
   buildSyscoinTsysDepositRequest,
+  buildSyscoinWithdrawTransaction,
   encodeSyscoinErc20Deposit,
   encodeSyscoinTsysDeposit,
 } from "../utils/syscoinBridge";
@@ -76,5 +77,25 @@ describe("syscoin bridge encoding", () => {
       buildSyscoinErc20WithdrawData(receiver, l2Token, amount).slice(0, 10),
       toFunctionSelector("withdraw(address,address,uint256)")
     );
+  });
+
+  it("builds matching Syscoin withdrawal transaction requests", () => {
+    const baseTokenTx = buildSyscoinWithdrawTransaction({
+      l1Receiver: receiver,
+      l2Token: "0x000000000000000000000000000000000000800A",
+      amount,
+    });
+    assert.equal(baseTokenTx.to, "0x000000000000000000000000000000000000800A");
+    assert.equal(baseTokenTx.value, amount);
+    assert.equal(baseTokenTx.data.slice(0, 10), toFunctionSelector("withdraw(address)"));
+
+    const erc20Tx = buildSyscoinWithdrawTransaction({
+      l1Receiver: receiver,
+      l2Token,
+      amount,
+    });
+    assert.equal(erc20Tx.to, "0x0000000000000000000000000000000000010003");
+    assert.equal(erc20Tx.value, 0n);
+    assert.equal(erc20Tx.data.slice(0, 10), toFunctionSelector("withdraw(address,address,uint256)"));
   });
 });

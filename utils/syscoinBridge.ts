@@ -9,6 +9,8 @@ import {
   type Hex,
 } from "viem";
 
+import { L2_ASSET_ROUTER_ADDRESS, L2_BASE_TOKEN_ADDRESS } from "./constants";
+
 import type { ZkSyncNetwork } from "@/data/networks";
 
 // SYSCOIN: constants mirror zksync-os-server's L1 priority transaction limits.
@@ -63,6 +65,18 @@ export const buildSyscoinErc20WithdrawData = (l1Receiver: Address, l2Token: Addr
     functionName: "withdraw",
     args: [l1Receiver, l2Token, amount],
   });
+};
+
+export const buildSyscoinWithdrawTransaction = (params: { l1Receiver: Address; l2Token: Address; amount: bigint }) => {
+  const isBaseToken = isAddressEqual(getAddress(params.l2Token), getAddress(L2_BASE_TOKEN_ADDRESS));
+
+  return {
+    to: (isBaseToken ? L2_BASE_TOKEN_ADDRESS : L2_ASSET_ROUTER_ADDRESS) as Address,
+    data: isBaseToken
+      ? buildSyscoinL2BaseTokenWithdrawData(params.l1Receiver)
+      : buildSyscoinErc20WithdrawData(params.l1Receiver, params.l2Token, params.amount),
+    value: isBaseToken ? params.amount : 0n,
+  };
 };
 
 export const buildSyscoinErc20SecondBridgeCalldata = (l1Token: Address, amount: bigint, l2Receiver: Address) => {
