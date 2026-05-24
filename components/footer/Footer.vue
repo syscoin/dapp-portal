@@ -12,11 +12,18 @@
           {{ portalRuntimeConfig.gitCommitHash }}
         </span>
       </CommonButtonLabel>
-      <CommonButtonLabel as="a" href="https://zksync.io/terms" target="_blank" class="footer-link">
-        Terms of Service
+      <CommonButtonLabel as="a" href="https://syscoin.org" target="_blank" class="footer-link">
+        Syscoin
       </CommonButtonLabel>
-      <CommonButtonLabel as="a" href="https://zksync.io/privacy" target="_blank" class="footer-link">
-        Privacy Policy
+      <CommonButtonLabel as="a" href="https://github.com/syscoin/dapp-portal" target="_blank" class="footer-link">
+        GitHub
+      </CommonButtonLabel>
+      <CommonButtonLabel as="a" href="https://discord.gg/syscoin" target="_blank" class="footer-link">
+        Discord
+      </CommonButtonLabel>
+      <CommonButtonLabel as="a" href="https://x.com/syscoin" target="_blank" class="footer-link"> X </CommonButtonLabel>
+      <CommonButtonLabel as="a" href="https://explorer-zk.tanenbaum.io" target="_blank" class="footer-link">
+        zkSYS Explorer
       </CommonButtonLabel>
     </div>
   </footer>

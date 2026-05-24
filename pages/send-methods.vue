@@ -26,7 +26,7 @@
           :description="`Explore ecosystem of third party bridges`"
           :icon="ArrowTopRightOnSquareIcon"
           as="a"
-          href="https://zksync.dappradar.com/ecosystem?category=defi_bridge"
+          href="https://syscoin.org/ecosystem"
           target="_blank"
         >
           <template #image>

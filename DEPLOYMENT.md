@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides a high-level description of the flow of events in the release and production pipeline for ZKsync Portal. It outlines the processes for preview, staging, and production deployments, as well as the role of automated and manual steps in ensuring quality and reliability.
+This document provides a high-level description of the flow of events in the release and production pipeline for zkSYS Portal. It outlines the processes for preview, staging, and production deployments, as well as the role of automated and manual steps in ensuring quality and reliability.
 
 ---
 

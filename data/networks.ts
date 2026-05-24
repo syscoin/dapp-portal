@@ -116,6 +116,7 @@ const publicChains: ZkSyncNetwork[] = [
   {
     id: 324,
     key: "mainnet",
+    hidden: true,
     name: "ZKsync Era",
     rpcUrl: "https://mainnet.era.zksync.io",
     blockExplorerUrl: "https://era.zksync.network",
@@ -130,6 +131,7 @@ const publicChains: ZkSyncNetwork[] = [
   {
     id: 300,
     key: "sepolia",
+    hidden: true,
     name: "ZKsync Era Sepolia",
     rpcUrl: "https://sepolia.era.zksync.dev",
     blockExplorerUrl: "https://sepolia-era.zksync.network",
@@ -157,6 +159,7 @@ const publicChains: ZkSyncNetwork[] = [
   {
     id: 9075,
     key: "gateway",
+    hidden: true,
     name: "ZKsync Gateway",
     rpcUrl: "https://rpc.era-gateway-mainnet.zksync.dev",
     blockExplorerUrl: "https://explorer.era-gateway-mainnet.zksync.dev",
@@ -177,6 +180,7 @@ const publicChains: ZkSyncNetwork[] = [
   {
     id: 32657,
     key: "gateway-testnet",
+    hidden: true,
     name: "ZKsync Gateway Testnet",
     rpcUrl: "https://rpc.era-gateway-testnet.zksync.dev",
     blockExplorerUrl: "https://explorer.era-gateway-testnet.zksync.dev",
@@ -197,7 +201,7 @@ const publicChains: ZkSyncNetwork[] = [
   {
     id: 57057,
     key: "syscoin-tanenbaum-zksys",
-    name: "Syscoin Tanenbaum zksys",
+    name: "zkSYS Tanenbaum",
     rpcUrl: "https://rpc-zk.tanenbaum.io",
     blockExplorerUrl: "https://explorer-zk.tanenbaum.io",
     l1Network: l1Networks.tanenbaum,
@@ -292,4 +296,4 @@ const determineChainList = (): ZkSyncNetwork[] => {
 };
 export const isCustomNode = !!nodeType;
 export const chainList: ZkSyncNetwork[] = determineChainList();
-export const defaultNetwork = chainList[0];
+export const defaultNetwork = chainList.find((network) => network.syscoinBridge) || chainList[0];

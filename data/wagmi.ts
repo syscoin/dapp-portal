@@ -10,10 +10,10 @@ import { getPrividiumTransport } from "@/data/prividium";
 const portalRuntimeConfig = usePortalRuntimeConfig();
 
 const metadata = {
-  name: "ZKsync Portal",
-  description: "ZKsync Portal - view balances, transfer and bridge tokens",
-  url: "https://portal.zksync.io",
-  icons: ["https://portal.zksync.io/icon.png"],
+  name: "zkSYS Portal",
+  description: "zkSYS Portal - view balances, transfer and bridge tokens",
+  url: "https://github.com/syscoin/dapp-portal",
+  icons: ["https://raw.githubusercontent.com/syscoin/dapp-portal/main/public/img/zksys-icon.svg"],
 };
 
 if (!portalRuntimeConfig.walletConnectProjectId) {
