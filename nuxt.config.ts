@@ -99,6 +99,7 @@ export default defineNuxtConfig({
         "GIT_COMMIT_HASH",
         "GIT_REPO_URL",
         "ONRAMP_STAGING",
+        "PORTAL_URL",
       ].map((key) => [`process.env.${key}`, JSON.stringify(process.env[key])])
     ),
     css: {

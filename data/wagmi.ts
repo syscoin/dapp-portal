@@ -12,7 +12,7 @@ const portalRuntimeConfig = usePortalRuntimeConfig();
 const metadata = {
   name: "zkSYS Portal",
   description: "zkSYS Portal - view balances, transfer and bridge tokens",
-  url: "https://github.com/syscoin/dapp-portal",
+  url: portalRuntimeConfig.portalUrl || window.location.origin,
   icons: ["https://raw.githubusercontent.com/syscoin/dapp-portal/main/public/img/zksys-icon.svg"],
 };
 
