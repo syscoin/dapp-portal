@@ -159,6 +159,7 @@ declare global {
       hyperchainsConfig?: HyperchainsConfig;
       gitCommitHash?: string;
       gitRepoUrl?: string;
+      portalUrl?: string;
     };
   }
 }

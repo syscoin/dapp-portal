@@ -11,10 +11,7 @@
         recommendedNetwork!.name
       }}</NuxtLink>
       instead. For more info see the
-      <a
-        class="underline underline-offset-2"
-        href="https://github.com/zkSync-Community-Hub/zksync-developers/discussions/228"
-        target="_blank"
+      <a class="underline underline-offset-2" href="https://github.com/syscoin/dapp-portal" target="_blank"
         >announcement</a
       >
       .

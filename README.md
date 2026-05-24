@@ -1,56 +1,38 @@
-![ZKsync Portal](public/preview.png)
+![zkSYS Portal](public/preview.png)
 
-# ZKsync Portal 🚀
+# zkSYS Portal
 
-**ZKsync Portal** is a state-of-the-art dapp, merging the power of bridge, tokens manager and transaction history into one user-friendly interface. Designed with a stress on effortless user experience, it simplifies token management, making it your premier interface for interacting with both ZKsync versions - every interaction smooth and efficient.
+**zkSYS Portal** is an open-source Syscoin community integration for bridging, token management, and transaction history on zkSYS.
 
-## ✨ Features
+## Features
 
-- 🖥️ Intuitive interface for managing, sending, and bridging ZKsync Era.
-- 📇 Ability to add contacts for quick and easy access.
-- 🔧 Effortless setup and connection to local ZKsync nodes or ZK Stack Hyperchains.
+- Manage, send, and bridge TSYS and supported tokens.
+- Discover token metadata through the Syscoin Blockscout-based registry.
+- Connect to the Syscoin Tanenbaum L1 and zkSYS Tanenbaum L2 networks.
 
-## 🎉 Try it out!
+## Development
 
-- 🌐 Dive in now at [portal.zksync.io](https://portal.zksync.io/).
+**Prerequisites:** Node.js version 20+, npm version 7+
 
----
-
-## 🌍 Connecting to local node
-
-Harness the Portal's power to connect to your [local ZKsync Era node](https://docs.zksync.io/zksync-node/quickstart).
-
-**Prerequisites:** Node.js version 16+, npm version 7+
-
-1. 📚 Follow the [documentation](https://docs.zksync.io/zksync-node/quickstart) for setting up either an **in-memory node** or **dockerized local setup**.
-2. 🔄 Clone the Portal repository and set it up:
+1. Clone the Portal repository and set it up:
    ```bash
-   git clone https://github.com/matter-labs/dapp-portal.git
+   git clone https://github.com/syscoin/dapp-portal.git
    cd dapp-portal
    npm install
    ```
-3. 🛠️ Modify the default network settings in `data/networks.ts` if your network ID, RPC URL, or other info differs. Customize displayed tokens there if needed.
-   - Alternatively, use the [configuration form](./hyperchains/README.md#configure-automatically-with-form) for guided config setup.
-4. 🔥 Launch the dev server:
-   - For in-memory node:
-     ```bash
-     npm run dev:node:memory
-     ```
-   - For dockerized setup:
-     `bash
-npm run dev:node:docker
-`
-     Navigate to the displayed Portal URL (typically http://localhost:3000).
+2. Launch the dev server:
+   ```bash
+   npm run dev
+   ```
+3. Open the displayed local URL, typically `http://localhost:3000`.
 
 ---
 
-## 🔗 Connecting to Hyperchain
+## Connecting to Hyperchain
 
 To use Portal with your ZK Stack Hyperchain, see the guide [here](./hyperchains/README.md).
 
 ---
-
-## 🛠 Development
 
 ### Advanced configuration
 
@@ -62,7 +44,7 @@ By default, L1 balances are fetched via a public RPC. For faster loading speeds 
 ANKR_TOKEN=your_ankr_token_here
 ```
 
-#### Wallet Connect Project Setup:
+#### Wallet Connect Project Setup
 
 Before deploying your own version of the Portal, ensure you create your own Wallet Connect project on [walletconnect.com](https://walletconnect.com). After creating the project, update the project ID in the `.env` file:
 
@@ -79,7 +61,7 @@ SENTRY_ENV=localhost # 'localhost' | 'production'
 ```
 SENTRY_ENV variable is used in order to filter the issues by environment. 
 
-### 🔧 Setup
+### Setup
 
 Ensure you've installed the necessary dependencies:
 
@@ -87,7 +69,7 @@ Ensure you've installed the necessary dependencies:
 npm install
 ```
 
-### 🌐 Development Server
+### Development Server
 
 Activate the dev server at http://localhost:3000:
 
@@ -95,7 +77,7 @@ Activate the dev server at http://localhost:3000:
 npm run dev
 ```
 
-### 🏭 Production
+### Production
 
 Compile for production:
 
@@ -107,12 +89,12 @@ npm run generate
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-Open arms for contributions! Enhance our code and send your pull request [here](https://github.com/matter-labs/dapp-portal/pulls).
+Contributions are welcome through the [Syscoin dapp-portal repository](https://github.com/syscoin/dapp-portal/pulls).
 
 ---
 
-## 📜 License
+## License
 
-Proudly under the [MIT License](https://github.com/matter-labs/dapp-portal/blob/main/LICENSE).
+Released under the [MIT License](https://github.com/syscoin/dapp-portal/blob/main/LICENSE).

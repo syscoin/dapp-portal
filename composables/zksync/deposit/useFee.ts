@@ -150,7 +150,11 @@ export default (tokens: Ref<Token[]>, balances: Ref<TokenAmount[] | undefined>) 
             return;
           }
         } else if (message?.includes("insufficient funds for gas * price + value")) {
-          throw new Error("Insufficient funds to cover deposit fee! Please, top up your account with ETH.");
+          throw new Error(
+            `Insufficient funds to cover deposit fee! Please, top up your account with ${
+              feeToken.value?.symbol || "the native fee token"
+            }.`
+          );
         }
         captureException({
           error: err as Error,

@@ -12,7 +12,7 @@
           >
             <template #image>
               <DestinationIconContainer>
-                <IconsEra aria-hidden="true" />
+                <img :src="networkIconUrl(selectedNetwork)" alt="" class="h-6 w-6" />
               </DestinationIconContainer>
             </template>
           </DestinationItem>
@@ -20,19 +20,6 @@
 
         <TypographyCategoryLabel size="sm">Portal</TypographyCategoryLabel>
         <CommonCardWithLineButtons>
-          <DestinationItem
-            v-if="selectedNetwork.displaySettings?.onramp"
-            label="On Ramp"
-            as="RouterLink"
-            :to="{ name: 'on-ramp' }"
-            size="sm"
-          >
-            <template #image>
-              <DestinationIconContainer>
-                <BanknotesIcon aria-hidden="true" />
-              </DestinationIconContainer>
-            </template>
-          </DestinationItem>
           <DestinationItem label="Bridge" as="RouterLink" :to="{ name: 'bridge' }" size="sm">
             <template #image>
               <DestinationIconContainer>
@@ -96,7 +83,7 @@
           >
             <template #image>
               <DestinationIconContainer>
-                <IconsEra aria-hidden="true" />
+                <img :src="networkIconUrl(item)" alt="" class="h-6 w-6" />
               </DestinationIconContainer>
             </template>
           </DestinationItem>
@@ -114,7 +101,7 @@
           >
             <template #image>
               <DestinationIconContainer>
-                <IconsEra aria-hidden="true" />
+                <img :src="networkIconUrl(item)" alt="" class="h-6 w-6" />
               </DestinationIconContainer>
             </template>
           </DestinationItem>
@@ -133,7 +120,6 @@ import {
   MoonIcon,
   SunIcon,
   WalletIcon,
-  BanknotesIcon,
 } from "@heroicons/vue/24/outline";
 
 import { chainList } from "@/data/networks";
@@ -180,6 +166,7 @@ const { switchColorMode, selectedColorMode } = useColorMode();
 
 const { selectedNetwork } = storeToRefs(useNetworkStore());
 const isNetworkSelected = (network: ZkSyncNetwork) => selectedNetwork.value.key === network.key;
+const networkIconUrl = (network: ZkSyncNetwork) => (network.syscoinBridge ? "/img/zksys-icon.svg" : "/img/era.svg");
 const buttonClicked = (network: ZkSyncNetwork) => {
   if (isNetworkSelected(network)) {
     return;

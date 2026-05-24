@@ -7,10 +7,7 @@
       <p>
         Bridging to {{ eraNetwork.name }} is temporarily disabled because of undergoing upgrade, expected to be
         completed by June 6th, 22:00 UTC. Please check back later. For more details, visit the
-        <a
-          href="https://github.com/zkSync-Community-Hub/zksync-developers/discussions/519"
-          target="_blank"
-          class="underline underline-offset-2"
+        <a href="https://github.com/syscoin/dapp-portal" target="_blank" class="underline underline-offset-2"
           >upgrade information page</a
         >.
       </p>

@@ -58,9 +58,9 @@
         <CommonCardWithLineButtons class="mt-block-padding-1/2">
           <DestinationItem
             label="Discord"
-            description="Get support, follow announcements and connect with community"
+            description="Get support, follow announcements, and connect with the Syscoin community"
             as="a"
-            href="https://join.zksync.dev/"
+            href="https://discord.gg/syscoin"
             target="_blank"
             :icon="ArrowTopRightOnSquareIcon"
             size="sm"
@@ -74,10 +74,10 @@
         </CommonCardWithLineButtons>
         <CommonCardWithLineButtons class="mt-block-padding-1/2">
           <DestinationItem
-            label="FAQ"
-            description="Find tutorials and answers to the most common questions"
+            label="Syscoin Docs"
+            description="Read network, wallet, and ecosystem documentation"
             as="a"
-            href="https://matterlabs.gitbook.io/zksync-community-hub/support/faq"
+            href="https://docs.syscoin.org"
             target="_blank"
             :icon="ArrowTopRightOnSquareIcon"
             size="sm"
@@ -91,10 +91,10 @@
         </CommonCardWithLineButtons>
         <CommonCardWithLineButtons class="mt-block-padding-1/2">
           <DestinationItem
-            label="Official Documentation"
-            description="Developer resources and technical ZKsync documentation"
+            label="zkSYS Explorer"
+            description="Inspect zkSYS blocks, transactions, and contracts"
             as="a"
-            href="https://era.zksync.io"
+            href="https://explorer-zk.tanenbaum.io"
             target="_blank"
             :icon="ArrowTopRightOnSquareIcon"
             size="sm"

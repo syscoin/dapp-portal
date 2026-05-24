@@ -12,12 +12,12 @@ export const useDestinationsStore = defineStore("destinations", () => {
     era: {
       key: "era",
       label: eraNetwork.value.name,
-      iconUrl: "/img/era.svg",
+      iconUrl: eraNetwork.value.syscoinBridge ? "/img/zksys-icon.svg" : "/img/era.svg",
     },
     ethereum: {
       key: "ethereum",
       label: l1Network.value ? l1Network.value.name : "",
-      iconUrl: "/img/ethereum.svg",
+      iconUrl: eraNetwork.value.syscoinBridge ? "/img/syscoin-icon.svg" : "/img/ethereum.svg",
     },
     layerswap: {
       key: "layerswap",

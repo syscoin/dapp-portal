@@ -1,18 +1,20 @@
+const previewImgSrc = "https://raw.githubusercontent.com/syscoin/dapp-portal/main/public/preview.png";
+
 export const portal = {
-  title: "ZKsync Portal | View balances, transfer and bridge tokens",
+  title: "zkSYS Portal | View balances, transfer and bridge tokens",
   description:
-    "ZKsync Portal allows you to view your balances, transfer tokens and bridge assets between ZKsync and Ethereum",
+    "zkSYS Portal lets you view balances, transfer tokens, and bridge assets between Syscoin Tanenbaum and zkSYS",
   previewImg: {
-    src: "https://portal.zksync.io/preview.png",
-    alt: "ZKsync Portal",
+    src: previewImgSrc,
+    alt: "zkSYS Portal",
   },
 };
 export const bridge = {
-  title: "ZKsync Bridge | Transfer funds between ZKsync and Ethereum",
+  title: "zkSYS Bridge | Transfer funds between Syscoin and zkSYS",
   description:
-    "With the ZKsync Bridge you can easily deposit tokens to ZKsync. Enjoy faster, cheaper and more efficient transactions with the future proof zkEVM scaling Ethereum's security and values.",
+    "Bridge TSYS and supported tokens between Syscoin Tanenbaum and zkSYS using the open-source Syscoin community portal.",
   previewImg: {
-    src: "https://portal.zksync.io/preview.png",
-    alt: "ZKsync Bridge",
+    src: previewImgSrc,
+    alt: "zkSYS Bridge",
   },
 };

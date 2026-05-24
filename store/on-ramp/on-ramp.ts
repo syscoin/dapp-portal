@@ -13,7 +13,7 @@ import type { Token } from "~/types";
 const devEnv = process.env.NODE_ENV === "development" || process.env.ONRAMP_STAGING === "true";
 
 createOnRampConfig({
-  integrator: "ZKsync Portal",
+  integrator: "zkSYS Portal",
   apiUrl: devEnv ? "https://easy-onramp-api-staging.zksync.dev/api" : "https://easy-onramp-api.zksync.dev/api",
   provider: EVM({
     // eslint-disable-next-line require-await

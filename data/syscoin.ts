@@ -23,7 +23,7 @@ export const syscoinTanenbaumTokens: Token[] = [
     symbol: "TSYS",
     name: "Tanenbaum Syscoin",
     decimals: 18,
-    iconUrl: "/img/eth.svg",
+    iconUrl: "/img/syscoin-icon.svg",
     isETH: true,
   },
 ];

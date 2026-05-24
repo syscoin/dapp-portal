@@ -54,8 +54,8 @@ export const useOnboardStore = defineStore("onboard", () => {
   const web3modal = createWeb3Modal({
     wagmiConfig,
     projectId: portalRuntimeConfig.walletConnectProjectId!,
-    termsConditionsUrl: "https://zksync.io/terms",
-    privacyPolicyUrl: "https://zksync.io/privacy",
+    termsConditionsUrl: "https://github.com/syscoin/dapp-portal",
+    privacyPolicyUrl: "https://github.com/syscoin/dapp-portal",
     themeMode: selectedColorMode.value,
   });
 

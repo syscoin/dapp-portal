@@ -20,5 +20,6 @@ export const usePortalRuntimeConfig = () => {
     hyperchainsConfig: runtimeConfig?.hyperchainsConfig,
     gitCommitHash: runtimeConfig?.gitCommitHash || process.env.GIT_COMMIT_HASH,
     gitRepoUrl: runtimeConfig?.gitRepoUrl || process.env.GIT_REPO_URL,
+    portalUrl: runtimeConfig?.portalUrl || process.env.PORTAL_URL,
   };
 };
