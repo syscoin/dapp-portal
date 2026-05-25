@@ -18,45 +18,66 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
   const allowanceCheckInProgress = ref<boolean>(false);
   const assetId = ref<null | string>(null);
   const approvedAllowance = ref<null | bigint>(null);
+  let allowanceCheckNonce = 0;
 
   watch(
     [tokenAddress],
     async () => {
+      const nonce = ++allowanceCheckNonce;
+      assetId.value = null;
+      approvedAllowance.value = null;
+
       if (!tokenAddress.value) {
         isNativeToken.value = null;
+        allowanceCheckInProgress.value = false;
         return;
       }
       if (tokenAddress.value === L2_BASE_TOKEN_ADDRESS) {
         isNativeToken.value = false;
+        allowanceCheckInProgress.value = false;
         return;
       }
-      allowanceCheckInProgress.value = true;
-      assetId.value = (await readContract(wagmiConfig, {
-        address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
-        abi: L2_NATIVE_TOKEN_VAULT_ABI,
-        functionName: "assetId",
-        args: [tokenAddress.value],
-        chainId: eraNetwork.value.id,
-      })) as string;
-      const originChainId: bigint = (await readContract(wagmiConfig, {
-        address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
-        abi: L2_NATIVE_TOKEN_VAULT_ABI,
-        functionName: "originChainId",
-        args: [assetId.value],
-        chainId: eraNetwork.value.id,
-      })) as bigint;
+      try {
+        allowanceCheckInProgress.value = true;
+        const checkedAssetId = (await readContract(wagmiConfig, {
+          address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
+          abi: L2_NATIVE_TOKEN_VAULT_ABI,
+          functionName: "assetId",
+          args: [tokenAddress.value],
+          chainId: eraNetwork.value.id,
+        })) as string;
+        const originChainId: bigint = (await readContract(wagmiConfig, {
+          address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
+          abi: L2_NATIVE_TOKEN_VAULT_ABI,
+          functionName: "originChainId",
+          args: [checkedAssetId],
+          chainId: eraNetwork.value.id,
+        })) as bigint;
 
-      const accountAddress = getAccount(wagmiConfig).address;
-      approvedAllowance.value = (await readContract(wagmiConfig, {
-        chainId: eraNetwork.value.id,
-        address: tokenAddress.value as Address,
-        abi: IERC20_ABI,
-        functionName: "allowance",
-        args: [accountAddress, L2_NATIVE_TOKEN_VAULT_ADDRESS],
-      })) as bigint;
+        const accountAddress = getAccount(wagmiConfig).address;
+        const allowance = (await readContract(wagmiConfig, {
+          chainId: eraNetwork.value.id,
+          address: tokenAddress.value as Address,
+          abi: IERC20_ABI,
+          functionName: "allowance",
+          args: [accountAddress, L2_NATIVE_TOKEN_VAULT_ADDRESS],
+        })) as bigint;
 
-      allowanceCheckInProgress.value = false;
-      isNativeToken.value = BigInt(eraNetwork.value.id) === originChainId;
+        if (nonce !== allowanceCheckNonce) return;
+        assetId.value = checkedAssetId;
+        approvedAllowance.value = allowance;
+        isNativeToken.value = BigInt(eraNetwork.value.id) === originChainId;
+      } catch {
+        if (nonce !== allowanceCheckNonce) return;
+        // Some curated zero-balance tokens may have an L2 mapping before the
+        // token contract is deployed. Treat them as non-native for UI purposes
+        // instead of leaving the form stuck in allowance-checking state.
+        isNativeToken.value = false;
+      } finally {
+        if (nonce === allowanceCheckNonce) {
+          allowanceCheckInProgress.value = false;
+        }
+      }
     },
     { immediate: true }
   );
