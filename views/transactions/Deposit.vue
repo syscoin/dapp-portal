@@ -437,12 +437,20 @@ const step = ref<"form" | "wallet-warning" | "confirm" | "submitted">("form");
 const destination = computed(() => destinations.value.era);
 
 const availableTokens = computed<Token[]>(() => {
-  if (balance.value) return balance.value;
-  return getTokensWithCustomBridgeTokens(
+  const registryTokens = getTokensWithCustomBridgeTokens(
     Object.values(l1Tokens.value ?? []),
     AddressChainType.L1,
     eraNetwork.value.l1Network?.id
   );
+  if (!balance.value) return registryTokens;
+
+  return [
+    ...balance.value,
+    ...registryTokens.filter(
+      (token) =>
+        !balance.value?.some((balanceToken) => balanceToken.address.toLowerCase() === token.address.toLowerCase())
+    ),
+  ];
 });
 const availableBalances = computed<TokenAmount[]>(() => {
   return balance.value ?? [];
@@ -453,15 +461,22 @@ const routeTokenAddress = computed(() => {
   }
   return checksumAddress(route.query.token);
 });
-const defaultToken = computed(
-  () =>
-    availableTokens.value.find((e) => e.address === baseToken.value?.l1Address) ?? availableTokens.value[0] ?? undefined
-);
+const defaultToken = computed(() => {
+  if (isSyscoinBridgeNetwork(eraNetwork.value)) {
+    return availableTokens.value.find((token) => token.isETH || token.l1Address === baseToken.value?.l1Address);
+  }
+  return (
+    availableTokens.value.find((token) => token.address === baseToken.value?.l1Address) ??
+    availableTokens.value[0] ??
+    undefined
+  );
+});
 const selectedTokenAddress = ref<string | undefined>(routeTokenAddress.value ?? defaultToken.value?.address);
 watch(
-  [routeTokenAddress, defaultToken],
-  ([routeToken, defaultToken]) => {
-    if (routeToken || !selectedTokenAddress.value) {
+  [routeTokenAddress, defaultToken, availableTokens],
+  ([routeToken, defaultToken, availableTokens]) => {
+    const selectedTokenExists = availableTokens.some((token) => token.address === selectedTokenAddress.value);
+    if (routeToken || !selectedTokenAddress.value || !selectedTokenExists) {
       selectedTokenAddress.value = routeToken ?? defaultToken?.address;
     }
   },
