@@ -244,6 +244,8 @@ watch(finalizeTransactionHash, (hash) => {
     },
   });
   transactionStatusStore.waitForCompletion(updatedTransaction).then((completedTransaction) => {
+    const persistedTransaction = transactionStatusStore.getTransaction(completedTransaction.transactionHash);
+    if (persistedTransaction?.info.toTransactionHash !== hash) return;
     transactionStatusStore.updateTransactionData(completedTransaction.transactionHash, completedTransaction);
   });
 });
