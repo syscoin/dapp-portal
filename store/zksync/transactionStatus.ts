@@ -182,16 +182,18 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
       }
 
       const publicClient = onboardStore.getPublicClient();
-      const isFinalized = await publicClient
+      const finalizationStatus = await publicClient
         .readContract({
           address: eraNetwork.value.syscoinBridge.l1NullifierAddress,
           abi: SYSCOIN_L1_NULLIFIER_ABI,
           functionName: "isWithdrawalFinalized",
           args: [finalizeParams.chainId, finalizeParams.l2BatchNumber, finalizeParams.l2MessageIndex],
         })
+        .then((isFinalized) => ({ checked: true, isFinalized }))
         // SYSCOIN: transient L1 RPC failures should not reject withdrawal
         // polling. If the proof is ready, keep the claim UI available.
-        .catch(() => false);
+        .catch(() => ({ checked: false, isFinalized: false }));
+      const isFinalized = finalizationStatus.isFinalized;
 
       if (!isFinalized && updatedTransaction.info.toTransactionHash) {
         const claimReceipt = await publicClient
@@ -209,10 +211,18 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
           Number.isFinite(claimSubmittedAt) &&
           Date.now() - claimSubmittedAt > SYSCOIN_L1_RECEIPT_TIMEOUT;
 
-        if ((claimReceipt && claimReceipt.status === "reverted") || claimTimedOut) {
+        const claimSucceededWithoutFinalizing =
+          claimReceipt && !isReceiptReverted(claimReceipt.status) && finalizationStatus.checked;
+
+        if (
+          (claimReceipt && isReceiptReverted(claimReceipt.status)) ||
+          claimTimedOut ||
+          claimSucceededWithoutFinalizing
+        ) {
           // SYSCOIN: only clear a reverted stored claim if the nullifier still
-          // says the withdrawal is unfinalized. If no receipt appears within
-          // the L1 wait window, assume the wallet tx was dropped/cancelled.
+          // says the withdrawal is unfinalized. A successful replacement that
+          // does not finalize the nullifier is a cancellation/replacement, not
+          // an in-flight claim.
           updatedTransaction.info.toTransactionHash = undefined;
           updatedTransaction.info.toTransactionSubmittedTimestamp = undefined;
         }
