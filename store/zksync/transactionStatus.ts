@@ -21,6 +21,7 @@ export type TransactionInfo = {
   timestamp: string;
   info: {
     toTransactionHash?: string;
+    toTransactionSubmittedTimestamp?: string;
     expectedCompleteTimestamp?: string;
     withdrawalFinalizationAvailable?: boolean;
     failed?: boolean;
@@ -196,11 +197,18 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
         const claimReceipt = await publicClient
           .getTransactionReceipt({ hash: updatedTransaction.info.toTransactionHash as Hash })
           .catch(() => undefined);
-        if (claimReceipt && claimReceipt.status === "reverted") {
+        const claimSubmittedAt = updatedTransaction.info.toTransactionSubmittedTimestamp
+          ? Date.parse(updatedTransaction.info.toTransactionSubmittedTimestamp)
+          : undefined;
+        const claimTimedOut =
+          !claimReceipt && (!claimSubmittedAt || Date.now() - claimSubmittedAt > SYSCOIN_L1_RECEIPT_TIMEOUT);
+
+        if ((claimReceipt && claimReceipt.status === "reverted") || claimTimedOut) {
           // SYSCOIN: only clear a reverted stored claim if the nullifier still
-          // says the withdrawal is unfinalized. A duplicate reverted claim can
-          // happen after an earlier successful claim.
+          // says the withdrawal is unfinalized. If no receipt appears within
+          // the L1 wait window, assume the wallet tx was dropped/cancelled.
           updatedTransaction.info.toTransactionHash = undefined;
+          updatedTransaction.info.toTransactionSubmittedTimestamp = undefined;
         }
       }
 

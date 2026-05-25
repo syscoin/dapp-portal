@@ -239,6 +239,7 @@ watch(finalizeTransactionHash, (hash) => {
     info: {
       ...props.transaction.info,
       toTransactionHash: hash,
+      toTransactionSubmittedTimestamp: new Date().toISOString(),
     },
   });
   transactionStatusStore.waitForCompletion(updatedTransaction).then((completedTransaction) => {
@@ -263,6 +264,8 @@ const buttonContinue = async () => {
         ...props.transaction.info,
         completed: true,
         toTransactionHash: finalizeTransactionHash.value! as string,
+        toTransactionSubmittedTimestamp:
+          props.transaction.info.toTransactionSubmittedTimestamp ?? new Date().toISOString(),
       },
     });
   }
