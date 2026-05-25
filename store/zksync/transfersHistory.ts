@@ -70,7 +70,9 @@ export const useZkSyncTransfersHistoryStore = defineStore("zkSyncTransfersHistor
     // SYSCOIN: Blockscout does not expose ZKsync explorer's
     // /address/:addr/transfers API. Use the persisted bridge-operation state
     // that already tracks completion via L1 receipt + L2 receipt polling.
-    return userTransactions.value.filter((transaction) => transaction.info.completed).map(mapLocalBridgeTransaction);
+    return userTransactions.value
+      .filter((transaction) => transaction.info.completed && !transaction.info.failed)
+      .map(mapLocalBridgeTransaction);
   };
 
   const {
