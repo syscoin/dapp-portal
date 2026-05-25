@@ -69,9 +69,9 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
   };
   const isTransactionNotFoundError = (error: Error) => {
     const message = error.message.toLowerCase();
+    const isReceiptOrTransactionError = message.includes("transaction") || message.includes("receipt");
     return (
-      message.includes("not found") ||
-      message.includes("could not find") ||
+      (isReceiptOrTransactionError && (message.includes("not found") || message.includes("could not find"))) ||
       message.includes("unknown transaction") ||
       message.includes("missing transaction")
     );
