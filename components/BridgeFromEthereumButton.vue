@@ -6,9 +6,7 @@
   >
     <DestinationItem as="RouterLink" :to="{ name: 'bridge' }" variant="primary">
       <template #image>
-        <DestinationIconContainer>
-          <img src="/img/syscoin-icon-white.svg" :alt="destinations.ethereum.label" class="h-7 w-7" />
-        </DestinationIconContainer>
+        <img src="/img/syscoin-icon-white.svg" :alt="destinations.ethereum.label" class="h-12 w-12 p-1.5" />
       </template>
       <template #label>
         <span class="text-white">Bridge from {{ eraNetwork.l1Network?.name }}</span>

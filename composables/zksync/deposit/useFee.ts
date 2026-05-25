@@ -206,6 +206,7 @@ export default (tokens: Ref<Token[]>, balances: Ref<TokenAmount[] | undefined>) 
       await cacheEstimateFee(params);
     },
     resetFee: () => {
+      cacheEstimateFee.clear();
       fee.value = undefined;
     },
 
