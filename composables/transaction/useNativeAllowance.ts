@@ -37,8 +37,8 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
         allowanceCheckInProgress.value = false;
         return;
       }
+      allowanceCheckInProgress.value = true;
       try {
-        allowanceCheckInProgress.value = true;
         const checkedAssetId = (await readContract(wagmiConfig, {
           address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
           abi: L2_NATIVE_TOKEN_VAULT_ABI,
@@ -54,6 +54,16 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
           chainId: eraNetwork.value.id,
         })) as bigint;
 
+        if (nonce !== allowanceCheckNonce) return;
+        assetId.value = checkedAssetId;
+        isNativeToken.value = BigInt(eraNetwork.value.id) === originChainId;
+
+        if (!isNativeToken.value) {
+          // SYSCOIN: L1-origin bridge tokens can have vault metadata before an
+          // L2 ERC20 contract exists, so only native tokens need allowance().
+          return;
+        }
+
         const accountAddress = getAccount(wagmiConfig).address;
         const allowance = (await readContract(wagmiConfig, {
           chainId: eraNetwork.value.id,
@@ -64,15 +74,16 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
         })) as bigint;
 
         if (nonce !== allowanceCheckNonce) return;
-        assetId.value = checkedAssetId;
         approvedAllowance.value = allowance;
-        isNativeToken.value = BigInt(eraNetwork.value.id) === originChainId;
-      } catch {
+      } catch (error) {
         if (nonce !== allowanceCheckNonce) return;
-        // SYSCOIN: curated zero-balance tokens may have an L2 mapping before
-        // the token contract is deployed. Treat them as non-native for UI
-        // purposes instead of leaving the form stuck in allowance checking.
-        isNativeToken.value = false;
+        captureException({
+          error: error as Error,
+          parentFunctionName: "useNativeAllowance",
+          parentFunctionParams: [tokenAddress.value, amount.value.toString()],
+          filePath: "composables/transaction/useNativeAllowance.ts",
+        });
+        isNativeToken.value = null;
       } finally {
         if (nonce === allowanceCheckNonce) {
           allowanceCheckInProgress.value = false;

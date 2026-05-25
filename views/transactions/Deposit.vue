@@ -478,14 +478,26 @@ const getTokenId = (token: Token, tokenAddress = selectedTokenAddress.value): st
 
   return hasMultipleL2Counterparts ? `${token.address}-${token.l2Address}` : token.address;
 };
+let lastAppliedRouteTokenAddress: string | undefined;
 watch(
   [routeTokenAddress, defaultToken, availableTokens],
   ([routeToken, defaultToken, availableTokens]) => {
+    // SYSCOIN: async Blockscout/registry token loading can arrive after the
+    // initial render; apply route token changes once without overriding later
+    // manual token selection on normal balance/list refreshes.
+    if (routeToken !== lastAppliedRouteTokenAddress) {
+      lastAppliedRouteTokenAddress = routeToken;
+      if (routeToken) {
+        selectedTokenAddress.value = routeToken;
+        return;
+      }
+    }
+
     const selectedTokenExists = [...availableTokens, ...availableBalances.value].some(
       (token) => getTokenId(token) === selectedTokenAddress.value
     );
-    if (routeToken || !selectedTokenAddress.value || !selectedTokenExists) {
-      selectedTokenAddress.value = routeToken ?? defaultToken?.address;
+    if (!selectedTokenAddress.value || !selectedTokenExists) {
+      selectedTokenAddress.value = defaultToken?.address;
     }
   },
   { immediate: true }
