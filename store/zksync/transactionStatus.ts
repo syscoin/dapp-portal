@@ -180,8 +180,8 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
         throw err;
       }
 
-      const isFinalized = await onboardStore
-        .getPublicClient()
+      const publicClient = onboardStore.getPublicClient();
+      const isFinalized = await publicClient
         .readContract({
           address: eraNetwork.value.syscoinBridge.l1NullifierAddress,
           abi: SYSCOIN_L1_NULLIFIER_ABI,
@@ -191,6 +191,18 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
         // SYSCOIN: transient L1 RPC failures should not reject withdrawal
         // polling. If the proof is ready, keep the claim UI available.
         .catch(() => false);
+
+      if (!isFinalized && updatedTransaction.info.toTransactionHash) {
+        const claimReceipt = await publicClient
+          .getTransactionReceipt({ hash: updatedTransaction.info.toTransactionHash as Hash })
+          .catch(() => undefined);
+        if (claimReceipt && claimReceipt.status === "reverted") {
+          // SYSCOIN: only clear a reverted stored claim if the nullifier still
+          // says the withdrawal is unfinalized. A duplicate reverted claim can
+          // happen after an earlier successful claim.
+          updatedTransaction.info.toTransactionHash = undefined;
+        }
+      }
 
       updatedTransaction.info.failed = false;
       updatedTransaction.info.withdrawalFinalizationAvailable = !isFinalized;
@@ -230,11 +242,12 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
     transaction.info.completed = true;
     return transaction;
   };
-  const waitForCompletion = async (transaction: TransactionInfo) => {
+  const refreshTransactionStatus = async (transaction: TransactionInfo) => {
     // SYSCOIN: older local state may have marked a delayed deposit as failed
     // while the L2 priority transaction was still pending. Re-check failed
     // deposits so opening the transaction can recover and persist success.
     if (transaction.info.completed && !(transaction.type === "deposit" && transaction.info.failed)) return transaction;
+
     if (transaction.type === "deposit") {
       transaction = await getDepositStatus(transaction);
     } else if (transaction.type === "withdrawal") {
@@ -242,7 +255,21 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
     } else if (transaction.type === "transfer") {
       transaction = await getTransferStatus(transaction);
     }
-    if (transaction.type === "withdrawal" && transaction.info.withdrawalFinalizationAvailable) {
+    return transaction;
+  };
+  const refreshSavedTransactionStatus = async (transaction: TransactionInfo) => {
+    const updatedTransaction = await refreshTransactionStatus(transaction);
+    updateTransactionData(updatedTransaction.transactionHash, updatedTransaction);
+    return updatedTransaction;
+  };
+  const waitForCompletion = async (transaction: TransactionInfo) => {
+    transaction = await refreshTransactionStatus(transaction);
+
+    if (
+      transaction.type === "withdrawal" &&
+      transaction.info.withdrawalFinalizationAvailable &&
+      !transaction.info.toTransactionHash
+    ) {
       // SYSCOIN: claimable is a terminal polling state for manual L1
       // finalization; returning lets the UI persist and render the Claim button.
       return transaction;
@@ -291,5 +318,6 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
     saveTransaction,
     updateTransactionData,
     getTransaction,
+    refreshSavedTransactionStatus,
   };
 });

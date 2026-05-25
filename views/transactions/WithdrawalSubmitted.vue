@@ -234,12 +234,15 @@ watch(finalizeTransactionHash, (hash) => {
   if (!hash || props.transaction.info.toTransactionHash === hash) return;
   // SYSCOIN: persist the L1 claim tx as soon as the wallet submits it. Waiting
   // for the receipt leaves other pages able to offer a duplicate claim.
-  transactionStatusStore.updateTransactionData(props.transaction.transactionHash, {
+  const updatedTransaction = transactionStatusStore.updateTransactionData(props.transaction.transactionHash, {
     ...props.transaction,
     info: {
       ...props.transaction.info,
       toTransactionHash: hash,
     },
+  });
+  transactionStatusStore.waitForCompletion(updatedTransaction).then((completedTransaction) => {
+    transactionStatusStore.updateTransactionData(completedTransaction.transactionHash, completedTransaction);
   });
 });
 
