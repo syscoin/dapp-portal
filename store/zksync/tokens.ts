@@ -2,7 +2,8 @@ import { $fetch } from "ofetch";
 import { utils } from "zksync-ethers";
 
 import { customBridgeTokens } from "@/data/customBridgeTokens";
-import { fetchSyscoinTokenRegistry } from "@/utils/syscoinBlockscout";
+import { syscoinTanenbaumTokens } from "@/data/syscoin";
+import { fetchSyscoinTokenRegistry, mergeSyscoinTokens } from "@/utils/syscoinBlockscout";
 import { isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
 
 import type { Api, Token } from "@/types";
@@ -97,12 +98,21 @@ export const useZkSyncTokensStore = defineStore("zkSyncTokens", () => {
     return Object.fromEntries(tokensRaw.value.map((token) => [token.address, token]));
   });
   const l1Tokens = computed<{ [tokenAddress: string]: Token } | undefined>(() => {
+    const isSyscoinBridge = isSyscoinBridgeNetwork(eraNetwork.value);
     const sourceTokens =
-      isSyscoinBridgeNetwork(eraNetwork.value) && syscoinL1TokensRaw.value ? syscoinL1TokensRaw.value : tokensRaw.value;
+      isSyscoinBridge && syscoinL1TokensRaw.value
+        ? mergeSyscoinTokens(
+            syscoinTanenbaumTokens.map((token) => ({
+              ...token,
+              address: token.l1Address || token.address,
+            })),
+            syscoinL1TokensRaw.value
+          )
+        : tokensRaw.value;
     if (!sourceTokens) return undefined;
     return Object.fromEntries(
       sourceTokens
-        .filter((e) => e.l1Address && (!isSyscoinBridgeNetwork(eraNetwork.value) || e.isETH || e.l2Address))
+        .filter((e) => e.l1Address && (!isSyscoinBridge || e.isETH || e.l2Address))
         .map((token) => {
           const customBridgeToken = customBridgeTokens.find(
             (e) => eraNetwork.value.l1Network?.id === e.chainId && token.l1Address === e.l1Address
