@@ -238,6 +238,11 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
     } else if (transaction.type === "transfer") {
       transaction = await getTransferStatus(transaction);
     }
+    if (transaction.type === "withdrawal" && transaction.info.withdrawalFinalizationAvailable) {
+      // SYSCOIN: claimable is a terminal polling state for manual L1
+      // finalization; returning lets the UI persist and render the Claim button.
+      return transaction;
+    }
     if (!transaction.info.completed) {
       const timeoutByType: Record<TransactionInfo["type"], number> = {
         deposit: 15_000,
