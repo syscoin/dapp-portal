@@ -1,4 +1,5 @@
 import {
+  decodeEventLog,
   encodeAbiParameters,
   encodeFunctionData,
   getAddress,
@@ -40,10 +41,29 @@ export const SYSCOIN_ERC20_ABI = parseAbi([
 ]);
 
 export const SYSCOIN_L1_NULLIFIER_ABI = parseAbi([
+  "function isWithdrawalFinalized(uint256 chainId, uint256 l2BatchNumber, uint256 l2MessageIndex) view returns (bool)",
   "function finalizeDeposit((uint256 chainId, uint256 l2BatchNumber, uint256 l2MessageIndex, address l2Sender, uint16 l2TxNumberInBatch, bytes message, bytes32[] merkleProof) finalizeWithdrawalParams)",
 ]);
 
+export const SYSCOIN_L1_MESSENGER_ADDRESS = "0x0000000000000000000000000000000000008008";
+export const SYSCOIN_L1_MESSAGE_SENT_ABI = parseAbi([
+  "event L1MessageSent(address indexed sender, bytes32 indexed hash, bytes message)",
+]);
+
 export type SyscoinBridgeNetwork = ZkSyncNetwork & Required<Pick<ZkSyncNetwork, "syscoinBridge">>;
+export type SyscoinFinalizeWithdrawalParams = {
+  chainId: bigint;
+  l2BatchNumber: bigint;
+  l2MessageIndex: bigint;
+  l2Sender: Address;
+  l2TxNumberInBatch: number;
+  message: Hex;
+  merkleProof: readonly Hex[];
+};
+
+type SyscoinRpcProvider = {
+  send: (method: string, params: unknown[]) => Promise<any>;
+};
 
 export const isSyscoinBridgeNetwork = (network: ZkSyncNetwork): network is SyscoinBridgeNetwork => {
   return !!network.syscoinBridge;
@@ -78,6 +98,56 @@ export const buildSyscoinWithdrawTransaction = (params: { l1Receiver: Address; l
       ? buildSyscoinL2BaseTokenWithdrawData(params.l1Receiver)
       : buildSyscoinErc20WithdrawData(params.l1Receiver, params.l2Token, params.amount),
     value: isBaseToken ? params.amount : 0n,
+  };
+};
+
+export const getSyscoinFinalizeWithdrawalParams = async (
+  provider: SyscoinRpcProvider,
+  withdrawalHash: Hex,
+  chainId: number | bigint
+): Promise<SyscoinFinalizeWithdrawalParams> => {
+  const receipt = await provider.send("eth_getTransactionReceipt", [withdrawalHash]);
+  if (!receipt) throw new Error("Withdrawal transaction is not mined yet");
+
+  const l1MessageSentLog = receipt.logs?.find((log: { address: Address; data: Hex; topics: Hex[] }) => {
+    if (!isAddressEqual(getAddress(log.address), getAddress(SYSCOIN_L1_MESSENGER_ADDRESS))) return false;
+    try {
+      decodeEventLog({
+        abi: SYSCOIN_L1_MESSAGE_SENT_ABI,
+        data: log.data,
+        topics: log.topics as [Hex, ...Hex[]],
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  if (!l1MessageSentLog) throw new Error("Withdrawal L1 message log is not available yet");
+
+  const { args } = decodeEventLog({
+    abi: SYSCOIN_L1_MESSAGE_SENT_ABI,
+    data: l1MessageSentLog.data,
+    topics: l1MessageSentLog.topics as [Hex, ...Hex[]],
+  });
+
+  const l2ToL1Logs = (receipt.l2ToL1Logs ?? []) as { sender: Address; key: Hex }[];
+  const l2ToL1LogIndex = l2ToL1Logs.findIndex((log) =>
+    isAddressEqual(getAddress(log.sender), getAddress(SYSCOIN_L1_MESSENGER_ADDRESS))
+  );
+  if (l2ToL1LogIndex < 0) throw new Error("Withdrawal L2 to L1 log is not available yet");
+
+  const proof = await provider.send("zks_getL2ToL1LogProof", [withdrawalHash, l2ToL1LogIndex]);
+  if (!proof) throw new Error("Withdrawal proof is not available yet");
+
+  const l2ToL1Log = l2ToL1Logs[l2ToL1LogIndex];
+  return {
+    chainId: BigInt(chainId),
+    l2BatchNumber: BigInt(proof.batchNumber),
+    l2MessageIndex: BigInt(proof.id),
+    l2Sender: getAddress(`0x${l2ToL1Log.key.slice(-40)}`),
+    l2TxNumberInBatch: Number(BigInt(receipt.transactionIndex)),
+    message: args.message as Hex,
+    merkleProof: proof.proof as readonly Hex[],
   };
 };
 

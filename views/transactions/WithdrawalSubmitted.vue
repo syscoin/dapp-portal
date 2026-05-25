@@ -65,9 +65,7 @@
       :completed="transaction.info.completed"
       :failed="transaction.info.failed"
       :animation-state="withdrawalFinalizationAvailable ? 'stopped-in-the-end' : undefined"
-      :expected-complete-timestamp="
-        withdrawalFinalizationAvailable ? undefined : transaction.info.expectedCompleteTimestamp
-      "
+      :expected-complete-timestamp="expectedCompleteTimestamp"
     >
       <template v-if="withdrawalFinalizationAvailable" #to-button>
         <template v-if="!isCorrectNetworkSet">
@@ -164,6 +162,7 @@ import { ExclamationTriangleIcon } from "@heroicons/vue/24/outline";
 import useWithdrawalFinalization from "@/composables/zksync/useWithdrawalFinalization";
 import { customBridgeTokens } from "@/data/customBridgeTokens";
 import { isCustomNode } from "@/data/networks";
+import { isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
 
 const props = defineProps({
   transaction: {
@@ -203,6 +202,12 @@ const withdrawalManualFinalizationRequired = computed(() => {
 });
 const withdrawalFinalizationAvailable = computed(() => {
   return withdrawalManualFinalizationRequired.value && props.transaction.info.withdrawalFinalizationAvailable;
+});
+const expectedCompleteTimestamp = computed(() => {
+  // SYSCOIN: zkSYS withdrawals require an explicit L1 claim once the proof is
+  // available; do not show "Funds should arrive soon" as if completion is automatic.
+  if (isSyscoinBridgeNetwork(eraNetwork.value) && withdrawalManualFinalizationRequired.value) return undefined;
+  return withdrawalFinalizationAvailable.value ? undefined : props.transaction.info.expectedCompleteTimestamp;
 });
 
 const {

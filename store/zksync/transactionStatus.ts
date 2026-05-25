@@ -2,6 +2,12 @@ import { useStorage } from "@vueuse/core";
 import { decodeEventLog } from "viem";
 import IZkSyncHyperchain from "zksync-ethers/abi/IZkSyncHyperchain.json";
 
+import {
+  SYSCOIN_L1_NULLIFIER_ABI,
+  getSyscoinFinalizeWithdrawalParams,
+  isSyscoinBridgeNetwork,
+} from "@/utils/syscoinBridge";
+
 import type { FeeEstimationParams } from "@/composables/zksync/useFee";
 import type { TokenAmount, Hash } from "@/types";
 
@@ -76,6 +82,7 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
       message.includes("missing transaction")
     );
   };
+  const isReceiptReverted = (status: unknown) => status === 0 || status === "0x0" || status === "reverted";
   const getDepositStatus = async (transaction: TransactionInfo) => {
     // Get L1 transaction receipt with retry logic for consistency
     const publicClient = onboardStore.getPublicClient();
@@ -123,7 +130,7 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
     if (!l2TransactionReceipt) return updatedTransaction;
 
     updatedTransaction.info.toTransactionHash = l2TransactionHash;
-    if (l2TransactionReceipt.status === 0 || l2TransactionReceipt.status === "reverted") {
+    if (isReceiptReverted(l2TransactionReceipt.status)) {
       updatedTransaction.info.failed = true;
     } else {
       updatedTransaction.info.failed = false;
@@ -132,6 +139,48 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
     return updatedTransaction;
   };
   const getWithdrawalStatus = async (transaction: TransactionInfo) => {
+    if (isSyscoinBridgeNetwork(eraNetwork.value)) {
+      const updatedTransaction = { ...transaction, info: { ...transaction.info } };
+      const provider = await providerStore.requestProvider();
+      const receipt = await provider.getTransactionReceipt(transaction.transactionHash);
+      if (!receipt) return updatedTransaction;
+
+      if (isReceiptReverted(receipt.status)) {
+        updatedTransaction.info.withdrawalFinalizationAvailable = false;
+        updatedTransaction.info.failed = true;
+        updatedTransaction.info.completed = true;
+        return updatedTransaction;
+      }
+
+      let finalizeParams;
+      try {
+        // SYSCOIN: proof availability is the OS equivalent of Era's
+        // zks_getTransactionDetails(...).status === "verified" gate.
+        finalizeParams = await getSyscoinFinalizeWithdrawalParams(
+          provider,
+          transaction.transactionHash as `0x${string}`,
+          eraNetwork.value.id
+        );
+      } catch (err) {
+        if (isTransactionNotFoundError(err as Error) || (err as Error).message.includes("not available yet")) {
+          return updatedTransaction;
+        }
+        throw err;
+      }
+
+      const isFinalized = (await onboardStore.getPublicClient().readContract({
+        address: eraNetwork.value.syscoinBridge.l1NullifierAddress,
+        abi: SYSCOIN_L1_NULLIFIER_ABI,
+        functionName: "isWithdrawalFinalized",
+        args: [finalizeParams.chainId, finalizeParams.l2BatchNumber, finalizeParams.l2MessageIndex],
+      })) as boolean;
+
+      updatedTransaction.info.failed = false;
+      updatedTransaction.info.withdrawalFinalizationAvailable = !isFinalized;
+      updatedTransaction.info.completed = isFinalized;
+      return updatedTransaction;
+    }
+
     if (!transaction.info.withdrawalFinalizationAvailable) {
       const provider = await providerStore.requestProvider();
       const transactionDetails = await provider.getTransactionDetails(transaction.transactionHash);

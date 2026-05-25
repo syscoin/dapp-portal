@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { encodeAbiParameters, toFunctionSelector } from "viem";
+import { encodeAbiParameters, toEventSelector, toFunctionSelector } from "viem";
 import { describe, it } from "vitest";
 
 import {
@@ -14,6 +14,7 @@ import {
   buildSyscoinWithdrawTransaction,
   encodeSyscoinErc20Deposit,
   encodeSyscoinTsysDeposit,
+  getSyscoinFinalizeWithdrawalParams,
 } from "../utils/syscoinBridge";
 
 const chainId = 57_057n;
@@ -69,10 +70,7 @@ describe("syscoin bridge encoding", () => {
   });
 
   it("builds L2 withdrawal calldata for TSYS and ERC20", () => {
-    assert.equal(
-      buildSyscoinL2BaseTokenWithdrawData(receiver).slice(0, 10),
-      toFunctionSelector("withdraw(address)")
-    );
+    assert.equal(buildSyscoinL2BaseTokenWithdrawData(receiver).slice(0, 10), toFunctionSelector("withdraw(address)"));
     assert.equal(
       buildSyscoinErc20WithdrawData(receiver, l2Token, amount).slice(0, 10),
       toFunctionSelector("withdraw(address,address,uint256)")
@@ -97,5 +95,52 @@ describe("syscoin bridge encoding", () => {
     assert.equal(erc20Tx.to, "0x0000000000000000000000000000000000010003");
     assert.equal(erc20Tx.value, 0n);
     assert.equal(erc20Tx.data.slice(0, 10), toFunctionSelector("withdraw(address,address,uint256)"));
+  });
+
+  it("derives OS withdrawal finalization params from receipt and log proof", async () => {
+    const withdrawalHash = "0xeb2ed53ace69581b2ea88d5cbd850e5b9a0bb897b521c4feda88a50de4d2f30b";
+    const message =
+      "0x6c0960f9ec2613bd64d860b654d30af8b1fd83fe9cf3e0070000000000000000000000000000000000000000000000008ac7230489e80000";
+    const proof = ["0x1111111111111111111111111111111111111111111111111111111111111111"];
+    const provider = {
+      send: async (method: string) => {
+        if (method === "eth_getTransactionReceipt") {
+          return {
+            transactionIndex: "0x3",
+            logs: [
+              {
+                address: "0x0000000000000000000000000000000000008008",
+                topics: [
+                  toEventSelector("L1MessageSent(address,bytes32,bytes)"),
+                  "0x000000000000000000000000000000000000000000000000000000000000800a",
+                  "0x8093dca118cb16c0f80e076e505980cfef061dd3425464fe0f28c98dc6142fd4",
+                ],
+                data: encodeAbiParameters([{ type: "bytes" }], [message]),
+              },
+            ],
+            l2ToL1Logs: [
+              {
+                sender: "0x0000000000000000000000000000000000008008",
+                key: "0x000000000000000000000000000000000000000000000000000000000000800a",
+              },
+            ],
+          };
+        }
+        if (method === "zks_getL2ToL1LogProof") {
+          return { batchNumber: 42, id: 7, proof };
+        }
+        throw new Error(`Unexpected RPC method: ${method}`);
+      },
+    };
+
+    const params = await getSyscoinFinalizeWithdrawalParams(provider, withdrawalHash, chainId);
+
+    assert.equal(params.chainId, chainId);
+    assert.equal(params.l2BatchNumber, 42n);
+    assert.equal(params.l2MessageIndex, 7n);
+    assert.equal(params.l2Sender, "0x000000000000000000000000000000000000800A");
+    assert.equal(params.l2TxNumberInBatch, 3);
+    assert.equal(params.message, message);
+    assert.deepEqual(params.merkleProof, proof);
   });
 });
