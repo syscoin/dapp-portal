@@ -21,6 +21,9 @@ export const SYSCOIN_DEFAULT_L2_GAS_LIMIT = 2_500_000n;
 // state is warm/non-initial. Keep a margin above observed ~518k estimates.
 export const SYSCOIN_DEFAULT_L1_DEPOSIT_GAS_LIMIT = 700_000n;
 export const SYSCOIN_DEFAULT_L1_APPROVAL_GAS_LIMIT = 90_000n;
+// SYSCOIN: Tanenbaum L1 has ~150s blocks, so viem's 180s receipt
+// timeout is too close to the normal block interval for wallet UX.
+export const SYSCOIN_L1_RECEIPT_TIMEOUT = 15 * 60_000;
 
 export const SYSCOIN_BRIDGEHUB_ABI = parseAbi([
   "function l2TransactionBaseCost(uint256 chainId, uint256 gasPrice, uint256 l2GasLimit, uint256 l2GasPerPubdataByteLimit) view returns (uint256)",

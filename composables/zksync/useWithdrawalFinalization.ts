@@ -6,6 +6,7 @@ import { IL1AssetRouter__factory as IL1AssetRouterFactory } from "zksync-ethers/
 import { L1_BRIDGE_ABI } from "@/data/abis/l1BridgeAbi";
 import { customBridgeTokens } from "@/data/customBridgeTokens";
 import {
+  SYSCOIN_L1_RECEIPT_TIMEOUT,
   SYSCOIN_L1_NULLIFIER_ABI,
   getSyscoinFinalizeWithdrawalParams,
   isSyscoinBridgeNetwork,
@@ -188,6 +189,9 @@ export default (transactionInfo: ComputedRef<TransactionInfo>) => {
       const receipt = await retry(() =>
         onboardStore.getPublicClient().waitForTransactionReceipt({
           hash: transactionHash.value!,
+          // SYSCOIN: Tanenbaum's ~150s L1 blocks can exceed viem's default
+          // 180s timeout once wallet/RPC propagation is included.
+          timeout: isSyscoinBridgeNetwork(providerStore.eraNetwork) ? SYSCOIN_L1_RECEIPT_TIMEOUT : undefined,
           onReplaced: (replacement) => {
             transactionHash.value = replacement.transaction.hash;
           },

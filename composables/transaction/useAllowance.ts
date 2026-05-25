@@ -3,7 +3,7 @@ import { L1Signer, utils } from "zksync-ethers";
 import IERC20 from "zksync-ethers/abi/IERC20.json";
 
 import { wagmiConfig } from "@/data/wagmi";
-import { isSyscoinBridgeNetwork, isSyscoinNativeToken } from "@/utils/syscoinBridge";
+import { SYSCOIN_L1_RECEIPT_TIMEOUT, isSyscoinBridgeNetwork, isSyscoinNativeToken } from "@/utils/syscoinBridge";
 
 import { useSentryLogger } from "../useSentryLogger";
 
@@ -99,6 +99,9 @@ export default (
             () =>
               getPublicClient().waitForTransactionReceipt({
                 hash: setAllowanceTransactionHashes.value[i]!,
+                // SYSCOIN: L1 approvals happen on Tanenbaum, whose ~150s block
+                // time is too close to viem's default 180s timeout.
+                timeout: isSyscoinBridgeNetwork(eraNetwork.value) ? SYSCOIN_L1_RECEIPT_TIMEOUT : undefined,
                 onReplaced: (replacement) => {
                   setAllowanceTransactionHashes.value[i] = replacement.transaction.hash;
                 },

@@ -3,6 +3,7 @@ import { decodeEventLog } from "viem";
 import IZkSyncHyperchain from "zksync-ethers/abi/IZkSyncHyperchain.json";
 
 import {
+  SYSCOIN_L1_RECEIPT_TIMEOUT,
   SYSCOIN_L1_NULLIFIER_ABI,
   getSyscoinFinalizeWithdrawalParams,
   isSyscoinBridgeNetwork,
@@ -89,6 +90,9 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
     const l1Receipt = await retry(() =>
       publicClient.waitForTransactionReceipt({
         hash: transaction.transactionHash as Hash,
+        // SYSCOIN: Tanenbaum L1 blocks are ~150s, so the default 180s
+        // timeout can expire before the first confirmation is observable.
+        timeout: isSyscoinBridgeNetwork(eraNetwork.value) ? SYSCOIN_L1_RECEIPT_TIMEOUT : undefined,
       })
     );
 
