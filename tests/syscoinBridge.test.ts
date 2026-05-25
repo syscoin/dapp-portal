@@ -101,9 +101,11 @@ describe("syscoin bridge encoding", () => {
     const withdrawalHash = "0xeb2ed53ace69581b2ea88d5cbd850e5b9a0bb897b521c4feda88a50de4d2f30b";
     const message =
       "0x6c0960f9ec2613bd64d860b654d30af8b1fd83fe9cf3e0070000000000000000000000000000000000000000000000008ac7230489e80000";
+    const messageHash = "0x8093dca118cb16c0f80e076e505980cfef061dd3425464fe0f28c98dc6142fd4";
     const proof = ["0x1111111111111111111111111111111111111111111111111111111111111111"];
+    let requestedProofIndex: number | undefined;
     const provider = {
-      send: async (method: string) => {
+      send: async (method: string, params?: unknown[]) => {
         if (method === "eth_getTransactionReceipt") {
           return {
             transactionIndex: "0x3",
@@ -113,7 +115,7 @@ describe("syscoin bridge encoding", () => {
                 topics: [
                   toEventSelector("L1MessageSent(address,bytes32,bytes)"),
                   "0x000000000000000000000000000000000000000000000000000000000000800a",
-                  "0x8093dca118cb16c0f80e076e505980cfef061dd3425464fe0f28c98dc6142fd4",
+                  messageHash,
                 ],
                 data: encodeAbiParameters([{ type: "bytes" }], [message]),
               },
@@ -122,11 +124,18 @@ describe("syscoin bridge encoding", () => {
               {
                 sender: "0x0000000000000000000000000000000000008008",
                 key: "0x000000000000000000000000000000000000000000000000000000000000800a",
+                value: "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              },
+              {
+                sender: "0x0000000000000000000000000000000000008008",
+                key: "0x000000000000000000000000000000000000000000000000000000000000800a",
+                value: messageHash,
               },
             ],
           };
         }
         if (method === "zks_getL2ToL1LogProof") {
+          requestedProofIndex = params?.[1] as number;
           return { batchNumber: 42, id: 7, proof };
         }
         throw new Error(`Unexpected RPC method: ${method}`);
@@ -135,6 +144,7 @@ describe("syscoin bridge encoding", () => {
 
     const params = await getSyscoinFinalizeWithdrawalParams(provider, withdrawalHash, chainId);
 
+    assert.equal(requestedProofIndex, 1);
     assert.equal(params.chainId, chainId);
     assert.equal(params.l2BatchNumber, 42n);
     assert.equal(params.l2MessageIndex, 7n);

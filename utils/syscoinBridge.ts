@@ -104,35 +104,33 @@ export const buildSyscoinWithdrawTransaction = (params: { l1Receiver: Address; l
 export const getSyscoinFinalizeWithdrawalParams = async (
   provider: SyscoinRpcProvider,
   withdrawalHash: Hex,
-  chainId: number | bigint
+  chainId: number | bigint,
+  withdrawalIndex = 0
 ): Promise<SyscoinFinalizeWithdrawalParams> => {
   const receipt = await provider.send("eth_getTransactionReceipt", [withdrawalHash]);
   if (!receipt) throw new Error("Withdrawal transaction is not mined yet");
 
-  const l1MessageSentLog = receipt.logs?.find((log: { address: Address; data: Hex; topics: Hex[] }) => {
-    if (!isAddressEqual(getAddress(log.address), getAddress(SYSCOIN_L1_MESSENGER_ADDRESS))) return false;
+  const l1MessageSentLogs = (receipt.logs ?? []).flatMap((log: { address: Address; data: Hex; topics: Hex[] }) => {
+    if (!isAddressEqual(getAddress(log.address), getAddress(SYSCOIN_L1_MESSENGER_ADDRESS))) return [];
     try {
-      decodeEventLog({
+      const decoded = decodeEventLog({
         abi: SYSCOIN_L1_MESSAGE_SENT_ABI,
         data: log.data,
         topics: log.topics as [Hex, ...Hex[]],
       });
-      return true;
+      return [{ log, args: decoded.args }];
     } catch {
-      return false;
+      return [];
     }
   });
+  const l1MessageSentLog = l1MessageSentLogs[withdrawalIndex];
   if (!l1MessageSentLog) throw new Error("Withdrawal L1 message log is not available yet");
 
-  const { args } = decodeEventLog({
-    abi: SYSCOIN_L1_MESSAGE_SENT_ABI,
-    data: l1MessageSentLog.data,
-    topics: l1MessageSentLog.topics as [Hex, ...Hex[]],
-  });
-
-  const l2ToL1Logs = (receipt.l2ToL1Logs ?? []) as { sender: Address; key: Hex }[];
-  const l2ToL1LogIndex = l2ToL1Logs.findIndex((log) =>
-    isAddressEqual(getAddress(log.sender), getAddress(SYSCOIN_L1_MESSENGER_ADDRESS))
+  const l2ToL1Logs = (receipt.l2ToL1Logs ?? []) as { sender: Address; key: Hex; value: Hex }[];
+  const l2ToL1LogIndex = l2ToL1Logs.findIndex(
+    (log) =>
+      isAddressEqual(getAddress(log.sender), getAddress(SYSCOIN_L1_MESSENGER_ADDRESS)) &&
+      log.value.toLowerCase() === l1MessageSentLog.args.hash.toLowerCase()
   );
   if (l2ToL1LogIndex < 0) throw new Error("Withdrawal L2 to L1 log is not available yet");
 
@@ -146,7 +144,7 @@ export const getSyscoinFinalizeWithdrawalParams = async (
     l2MessageIndex: BigInt(proof.id),
     l2Sender: getAddress(`0x${l2ToL1Log.key.slice(-40)}`),
     l2TxNumberInBatch: Number(BigInt(receipt.transactionIndex)),
-    message: args.message as Hex,
+    message: l1MessageSentLog.args.message as Hex,
     merkleProof: proof.proof as readonly Hex[],
   };
 };
