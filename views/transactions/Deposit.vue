@@ -437,8 +437,20 @@ const step = ref<"form" | "wallet-warning" | "confirm" | "submitted">("form");
 const destination = computed(() => destinations.value.era);
 
 const availableTokens = computed<Token[]>(() => {
-  if (balance.value) return balance.value;
-  return getTokensWithCustomBridgeTokens(Object.values(l1Tokens.value ?? []), AddressChainType.L1);
+  const registryTokens = getTokensWithCustomBridgeTokens(
+    Object.values(l1Tokens.value ?? []),
+    AddressChainType.L1,
+    eraNetwork.value.l1Network?.id
+  );
+  if (!balance.value) return registryTokens;
+
+  return [
+    ...balance.value,
+    ...registryTokens.filter(
+      (token) =>
+        !balance.value?.some((balanceToken) => balanceToken.address.toLowerCase() === token.address.toLowerCase())
+    ),
+  ];
 });
 const availableBalances = computed<TokenAmount[]>(() => {
   return balance.value ?? [];
@@ -449,25 +461,51 @@ const routeTokenAddress = computed(() => {
   }
   return checksumAddress(route.query.token);
 });
-const defaultToken = computed(
-  () =>
-    availableTokens.value.find((e) => e.address === baseToken.value?.l1Address) ?? availableTokens.value[0] ?? undefined
-);
+const defaultToken = computed(() => {
+  if (isSyscoinBridgeNetwork(eraNetwork.value)) {
+    return availableTokens.value.find((token) => token.isETH || token.l1Address === baseToken.value?.l1Address);
+  }
+  return (
+    availableTokens.value.find((token) => token.address === baseToken.value?.l1Address) ??
+    availableTokens.value[0] ??
+    undefined
+  );
+});
 const selectedTokenAddress = ref<string | undefined>(routeTokenAddress.value ?? defaultToken.value?.address);
+const getTokenId = (token: Token, tokenAddress = selectedTokenAddress.value): string => {
+  const hasMultipleL2Counterparts =
+    tokenAddress?.includes(token.address) && tokenAddress?.includes(String(token.l2Address));
+
+  return hasMultipleL2Counterparts ? `${token.address}-${token.l2Address}` : token.address;
+};
+let lastAppliedRouteTokenAddress: string | undefined;
+watch(
+  [routeTokenAddress, defaultToken, availableTokens],
+  ([routeToken, defaultToken, availableTokens]) => {
+    // SYSCOIN: async Blockscout/registry token loading can arrive after the
+    // initial render; apply route token changes once without overriding later
+    // manual token selection on normal balance/list refreshes.
+    if (routeToken !== lastAppliedRouteTokenAddress) {
+      lastAppliedRouteTokenAddress = routeToken;
+      if (routeToken) {
+        selectedTokenAddress.value = routeToken;
+        return;
+      }
+    }
+
+    const selectedTokenExists = [...availableTokens, ...availableBalances.value].some(
+      (token) => getTokenId(token) === selectedTokenAddress.value
+    );
+    if (!selectedTokenAddress.value || !selectedTokenExists) {
+      selectedTokenAddress.value = defaultToken?.address;
+    }
+  },
+  { immediate: true }
+);
 const selectedToken = computed<Token | undefined>(() => {
   if (!selectedTokenAddress.value) {
     return defaultToken.value;
   }
-
-  // Handle special case for L1 tokens with multiple L2 counterparts (native and bridged)
-  // In the case of those tokens, we create the identifier by combining the L1 address and L2 address
-  const getTokenId = (token: Token): string => {
-    const hasMultipleL2Counterparts =
-      selectedTokenAddress.value?.includes(token.address) &&
-      selectedTokenAddress.value?.includes(String(token.l2Address));
-
-    return hasMultipleL2Counterparts ? `${token.address}-${token.l2Address}` : token.address;
-  };
 
   return (
     availableTokens.value.find((e) => getTokenId(e) === selectedTokenAddress.value) ||

@@ -166,7 +166,7 @@ const { switchColorMode, selectedColorMode } = useColorMode();
 
 const { selectedNetwork } = storeToRefs(useNetworkStore());
 const isNetworkSelected = (network: ZkSyncNetwork) => selectedNetwork.value.key === network.key;
-const networkIconUrl = (network: ZkSyncNetwork) => (network.syscoinBridge ? "/img/zksys-icon.svg" : "/img/era.svg");
+const networkIconUrl = (network: ZkSyncNetwork) => (network.syscoinBridge ? "/img/syscoin-icon.svg" : "/img/era.svg");
 const buttonClicked = (network: ZkSyncNetwork) => {
   if (isNetworkSelected(network)) {
     return;

@@ -91,9 +91,10 @@ export const mapSyscoinBlockscoutTokenBalance = (
   };
 };
 
-const fetchBlockscoutCollection = async <T>(apiUrl: string, path: string, maxPages = 5) => {
+const fetchBlockscoutCollection = async <T>(apiUrl: string, path: string, maxPages = 20) => {
   const items: T[] = [];
   let nextPageParams: BlockscoutCollection<T>["next_page_params"] = {};
+  const seenPageCursors = new Set<string>();
 
   for (let page = 0; page < maxPages && nextPageParams !== null; page++) {
     const url = new URL(`${normalizeApiUrl(apiUrl)}${path}`);
@@ -101,8 +102,14 @@ const fetchBlockscoutCollection = async <T>(apiUrl: string, path: string, maxPag
       url.searchParams.set("type", "ERC-20");
     }
     for (const [key, value] of Object.entries(nextPageParams ?? {})) {
-      if (value != null) url.searchParams.set(key, String(value));
+      // SYSCOIN: Blockscout v2 pagination expects null cursor fields to be
+      // present as empty query params. Dropping them causes repeated pages.
+      url.searchParams.set(key, value == null ? "" : String(value));
     }
+
+    const cursor = url.searchParams.toString();
+    if (seenPageCursors.has(cursor)) break;
+    seenPageCursors.add(cursor);
 
     const response = await $fetch<BlockscoutCollection<T>>(url.toString());
     items.push(...response.items);

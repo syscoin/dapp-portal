@@ -1,6 +1,6 @@
 import { utils } from "zksync-ethers";
 
-import { customBridgeTokens } from "@/data/customBridgeTokens";
+import { customBridgeTokens } from "../data/customBridgeTokens";
 
 import type { ZkSyncNetwork } from "@/data/networks";
 import type { Token, TokenAmount } from "@/types";
@@ -66,20 +66,26 @@ export enum AddressChainType {
 
 export function getBalancesWithCustomBridgeTokens(
   balances: TokenAmount[] | undefined,
-  addressChainType: AddressChainType
+  addressChainType: AddressChainType,
+  chainId?: number
 ): TokenAmount[] {
-  if (!balances || balances.length === 0) return [];
+  const currentBalances = balances ?? [];
 
-  const customBridgeTokensAddresses = customBridgeTokens.map((customToken) => {
+  const chainCustomBridgeTokens = chainId
+    ? customBridgeTokens.filter((customToken) => customToken.chainId === chainId)
+    : customBridgeTokens;
+  const customBridgeTokensAddresses = chainCustomBridgeTokens.map((customToken) => {
     if (addressChainType === AddressChainType.L1) {
       return customToken.l1Address;
     }
     return customToken.l2Address;
   });
 
-  const mappedCustomBridgeTokens: TokenAmount[] = customBridgeTokens.map((customToken) => {
+  const mappedCustomBridgeTokens: TokenAmount[] = chainCustomBridgeTokens.map((customToken) => {
     const customTokenAddress = addressChainType === AddressChainType.L1 ? customToken.l1Address : customToken.l2Address;
-    const customTokenBalance = balances.find((balance) => balance.address === customTokenAddress);
+    const customTokenBalance = currentBalances.find(
+      (balance) => balance.address.toLowerCase() === customTokenAddress.toLowerCase()
+    );
     return {
       address: customTokenAddress,
       decimals: customTokenBalance?.decimals || customToken.decimals,
@@ -88,7 +94,7 @@ export function getBalancesWithCustomBridgeTokens(
       amount: customTokenBalance?.amount || "0",
       l1Address: customToken.l1Address,
       l2Address: customToken.l2Address,
-      iconUrl: customTokenBalance?.iconUrl,
+      iconUrl: customTokenBalance?.iconUrl || customToken.iconUrl,
       price: customTokenBalance?.price,
       isETH: customTokenBalance?.isETH || false,
       l1BridgeAddress: customToken.l1BridgeAddress,
@@ -97,7 +103,12 @@ export function getBalancesWithCustomBridgeTokens(
   });
 
   // Remove duplicate
-  const filteredBalances = balances.filter((balance) => !customBridgeTokensAddresses.includes(balance.address));
+  const filteredBalances = currentBalances.filter(
+    (balance) =>
+      !customBridgeTokensAddresses.some(
+        (customBridgeTokenAddress) => customBridgeTokenAddress.toLowerCase() === balance.address.toLowerCase()
+      )
+  );
 
   const sortedBalances = [...filteredBalances, ...mappedCustomBridgeTokens].sort((a, b) => {
     const ethAddress =
@@ -122,21 +133,27 @@ export function getBalancesWithCustomBridgeTokens(
 
 export function getTokensWithCustomBridgeTokens(
   tokens: Token[] | undefined,
-  addressChainType: AddressChainType
+  addressChainType: AddressChainType,
+  chainId?: number
 ): Token[] {
-  if (!tokens || tokens.length === 0) return [];
+  const currentTokens = tokens ?? [];
 
-  const customBridgeTokensAddresses = customBridgeTokens.map((customToken) => {
+  const chainCustomBridgeTokens = chainId
+    ? customBridgeTokens.filter((customToken) => customToken.chainId === chainId)
+    : customBridgeTokens;
+  const customBridgeTokensAddresses = chainCustomBridgeTokens.map((customToken) => {
     if (addressChainType === AddressChainType.L1) {
       return customToken.l1Address;
     }
     return customToken.l2Address;
   });
 
-  const mappedCustomBridgeTokens: Token[] = customBridgeTokens.map((customBridgeToken) => {
+  const mappedCustomBridgeTokens: Token[] = chainCustomBridgeTokens.map((customBridgeToken) => {
     const customBridgeTokenAddress =
       addressChainType === AddressChainType.L1 ? customBridgeToken.l1Address : customBridgeToken.l2Address;
-    const customToken = tokens.find((token) => token.address === customBridgeTokenAddress);
+    const customToken = currentTokens.find(
+      (token) => token.address.toLowerCase() === customBridgeTokenAddress.toLowerCase()
+    );
     return {
       address: customBridgeTokenAddress,
       name: customBridgeToken.name,
@@ -144,7 +161,7 @@ export function getTokensWithCustomBridgeTokens(
       l1Address: customBridgeToken.l1Address,
       l2Address: customBridgeToken.l2Address,
       decimals: customToken?.decimals || customBridgeToken.decimals,
-      iconUrl: customToken?.iconUrl,
+      iconUrl: customToken?.iconUrl || customBridgeToken.iconUrl,
       price: customToken?.price,
       isETH: customToken?.isETH || false,
       l1BridgeAddress: customBridgeToken.l1BridgeAddress,
@@ -153,7 +170,12 @@ export function getTokensWithCustomBridgeTokens(
   });
 
   // Remove duplicate
-  const filteredTokens = tokens.filter((token) => !customBridgeTokensAddresses.includes(token.address));
+  const filteredTokens = currentTokens.filter(
+    (token) =>
+      !customBridgeTokensAddresses.some(
+        (customBridgeTokenAddress) => customBridgeTokenAddress.toLowerCase() === token.address.toLowerCase()
+      )
+  );
 
   const sortedTokens = [...mappedCustomBridgeTokens, ...filteredTokens].sort((a, b) => {
     const ethAddress =

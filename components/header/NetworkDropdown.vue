@@ -3,7 +3,7 @@
     <MenuButton as="template">
       <CommonButtonDropdown :toggled="open">
         <template #left-icon>
-          <IconsEra />
+          <img :src="networkIconUrl(selectedNetwork)" alt="" class="h-full w-full" />
         </template>
         <span>{{ selectedNetwork.name }}</span>
       </CommonButtonDropdown>
@@ -21,7 +21,7 @@
               @click="buttonClicked(item)"
             >
               <template #left-icon>
-                <IconsEra />
+                <img :src="networkIconUrl(item)" alt="" class="h-full w-full" />
               </template>
               <span>{{ item.name }}</span>
               <template #right-icon>
@@ -44,7 +44,7 @@
               @click="buttonClicked(item)"
             >
               <template #left-icon>
-                <IconsEra />
+                <img :src="networkIconUrl(item)" alt="" class="h-full w-full" />
               </template>
               <span>{{ item.name }}</span>
               <template #right-icon>
@@ -74,6 +74,7 @@ const route = useRoute();
 const { selectedNetwork } = storeToRefs(useNetworkStore());
 
 const isNetworkSelected = (network: ZkSyncNetwork) => selectedNetwork.value.key === network.key;
+const networkIconUrl = (network: ZkSyncNetwork) => (network.syscoinBridge ? "/img/syscoin-icon.svg" : "/img/era.svg");
 
 const buttonClicked = (network: ZkSyncNetwork) => {
   if (isNetworkSelected(network)) {

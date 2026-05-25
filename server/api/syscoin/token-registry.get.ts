@@ -30,10 +30,17 @@ export default defineCachedEventHandler(
       fetchSyscoinBlockscoutTokens(syscoinTanenbaumBridge.l2BlockscoutApiUrl, "L2", syscoinTanenbaumTokens),
     ]);
 
-    const l1Tokens = await attachSyscoinL2MappingsToL1Tokens(
+    const mappedL1Tokens = await attachSyscoinL2MappingsToL1Tokens(
       l2PublicClient,
       l1BlockscoutTokens,
       syscoinTanenbaumTokens
+    );
+    const l1Tokens = mergeSyscoinTokens(
+      syscoinTanenbaumTokens.map((token) => ({
+        ...token,
+        address: token.l1Address || token.address,
+      })),
+      mappedL1Tokens
     );
     const l2MappedTokens = attachSyscoinL1MappingsToL2Tokens(l2BlockscoutTokens, l1Tokens);
     const l2Tokens = mergeSyscoinTokens(syscoinTanenbaumTokens, l2MappedTokens);

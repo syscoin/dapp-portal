@@ -154,8 +154,10 @@ const selectedTokenAddress = computed({
   set: (value?: string) => emit("update:tokenAddress", value),
 });
 const selectedToken = computed(() => {
-  const tokens = props.balances.length ? props.balances : props.tokens;
-  return tokens.find((e) => e.address === props.tokenAddress);
+  return (
+    props.balances.find((token) => token.address === props.tokenAddress) ??
+    props.tokens.find((token) => token.address === props.tokenAddress)
+  );
 });
 const tokenBalance = computed(() => {
   if (!props.balances.length || !selectedToken.value) {

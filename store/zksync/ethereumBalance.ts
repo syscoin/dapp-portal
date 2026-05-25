@@ -120,16 +120,16 @@ export const useZkSyncEthereumBalanceStore = defineStore("zkSyncEthereumBalances
 
       if (isSyscoinBridgeNetwork(selectedNetwork.value)) {
         const blockscoutBalances = await getBalancesFromSyscoinBlockscout();
-        return getBalancesWithCustomBridgeTokens(blockscoutBalances, AddressChainType.L1);
+        return getBalancesWithCustomBridgeTokens(blockscoutBalances, AddressChainType.L1, l1Network.value?.id);
       } else if (
         ([l1Networks.mainnet.id, l1Networks.sepolia.id] as number[]).includes(l1Network.value?.id) &&
         portalRuntimeConfig.ankrToken
       ) {
         const apiBalances = await getBalancesFromApi();
-        return getBalancesWithCustomBridgeTokens(apiBalances, AddressChainType.L1);
+        return getBalancesWithCustomBridgeTokens(apiBalances, AddressChainType.L1, l1Network.value?.id);
       } else {
         const rpcBalances = await getBalancesFromRPC();
-        return getBalancesWithCustomBridgeTokens(rpcBalances, AddressChainType.L1);
+        return getBalancesWithCustomBridgeTokens(rpcBalances, AddressChainType.L1, l1Network.value?.id);
       }
     },
     { cache: 30000 }

@@ -214,14 +214,16 @@ export const useZkSyncWalletStore = defineStore("zkSyncWallet", () => {
       return bValue - aValue;
     });
 
-    return getBalancesWithCustomBridgeTokens(sortedTokens, AddressChainType.L2);
+    return getBalancesWithCustomBridgeTokens(sortedTokens, AddressChainType.L2, eraNetwork.value.l1Network?.id);
   });
 
   const deductBalance = (tokenAddress: string, amount: BigNumberish) => {
     if (!balance.value) return;
-    const tokenBalance = getBalancesWithCustomBridgeTokens(balance.value, AddressChainType.L2).find(
-      (balance) => balance.address === tokenAddress
-    );
+    const tokenBalance = getBalancesWithCustomBridgeTokens(
+      balance.value,
+      AddressChainType.L2,
+      eraNetwork.value.l1Network?.id
+    ).find((balance) => balance.address === tokenAddress);
     if (!tokenBalance) return;
     const newBalance = BigInt(tokenBalance.amount) - BigInt(amount);
     tokenBalance.amount = newBalance < 0n ? "0" : newBalance.toString();

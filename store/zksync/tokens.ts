@@ -2,7 +2,8 @@ import { $fetch } from "ofetch";
 import { utils } from "zksync-ethers";
 
 import { customBridgeTokens } from "@/data/customBridgeTokens";
-import { fetchSyscoinTokenRegistry } from "@/utils/syscoinBlockscout";
+import { syscoinTanenbaumTokens } from "@/data/syscoin";
+import { fetchSyscoinTokenRegistry, mergeSyscoinTokens } from "@/utils/syscoinBlockscout";
 import { isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
 
 import type { Api, Token } from "@/types";
@@ -10,19 +11,23 @@ import type { Api, Token } from "@/types";
 export const useZkSyncTokensStore = defineStore("zkSyncTokens", () => {
   const providerStore = useZkSyncProviderStore();
   const { eraNetwork } = storeToRefs(providerStore);
+  const syscoinL1TokensRaw = ref<Token[] | undefined>();
 
   const {
     result: tokensRaw,
     inProgress: tokensRequestInProgress,
     error: tokensRequestError,
     execute: requestTokens,
-    reset: resetTokens,
+    reset: resetTokensRaw,
   } = usePromise<Token[]>(async () => {
     if (isSyscoinBridgeNetwork(eraNetwork.value)) {
       // SYSCOIN: global token discovery and L1->L2 mapping resolution are
       // server-cached. The client only renders the normalized registry.
-      return (await fetchSyscoinTokenRegistry()).l2Tokens;
+      const registry = await fetchSyscoinTokenRegistry();
+      syscoinL1TokensRaw.value = registry.l1Tokens;
+      return registry.l2Tokens;
     }
+    syscoinL1TokensRaw.value = undefined;
 
     const provider = await providerStore.requestProvider();
     const ethL2TokenAddress = await provider.l2TokenAddress(utils.ETH_ADDRESS);
@@ -93,10 +98,21 @@ export const useZkSyncTokensStore = defineStore("zkSyncTokens", () => {
     return Object.fromEntries(tokensRaw.value.map((token) => [token.address, token]));
   });
   const l1Tokens = computed<{ [tokenAddress: string]: Token } | undefined>(() => {
-    if (!tokensRaw.value) return undefined;
+    const isSyscoinBridge = isSyscoinBridgeNetwork(eraNetwork.value);
+    const sourceTokens =
+      isSyscoinBridge && syscoinL1TokensRaw.value
+        ? mergeSyscoinTokens(
+            syscoinTanenbaumTokens.map((token) => ({
+              ...token,
+              address: token.l1Address || token.address,
+            })),
+            syscoinL1TokensRaw.value
+          )
+        : tokensRaw.value;
+    if (!sourceTokens) return undefined;
     return Object.fromEntries(
-      tokensRaw.value
-        .filter((e) => e.l1Address)
+      sourceTokens
+        .filter((e) => e.l1Address && (!isSyscoinBridge || e.isETH || e.l2Address))
         .map((token) => {
           const customBridgeToken = customBridgeTokens.find(
             (e) => eraNetwork.value.l1Network?.id === e.chainId && token.l1Address === e.l1Address
@@ -124,6 +140,9 @@ export const useZkSyncTokensStore = defineStore("zkSyncTokens", () => {
     tokensRequestInProgress: computed(() => tokensRequestInProgress.value),
     tokensRequestError: computed(() => tokensRequestError.value),
     requestTokens,
-    resetTokens,
+    resetTokens: () => {
+      syscoinL1TokensRaw.value = undefined;
+      resetTokensRaw();
+    },
   };
 });
