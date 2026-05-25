@@ -230,6 +230,25 @@ watch(
   },
   { immediate: true }
 );
+watch(finalizeTransactionHash, (hash) => {
+  if (!isSyscoinBridgeNetwork(eraNetwork.value)) return;
+  if (!hash || props.transaction.info.toTransactionHash === hash) return;
+  // SYSCOIN: persist the L1 claim tx as soon as the wallet submits it. Waiting
+  // for the receipt leaves other pages able to offer a duplicate claim.
+  const updatedTransaction = transactionStatusStore.updateTransactionData(props.transaction.transactionHash, {
+    ...props.transaction,
+    info: {
+      ...props.transaction.info,
+      toTransactionHash: hash,
+      toTransactionSubmittedTimestamp: new Date().toISOString(),
+    },
+  });
+  transactionStatusStore.waitForCompletion(updatedTransaction).then((completedTransaction) => {
+    const persistedTransaction = transactionStatusStore.getTransaction(completedTransaction.transactionHash);
+    if (persistedTransaction?.info.toTransactionHash !== hash) return;
+    transactionStatusStore.updateTransactionData(completedTransaction.transactionHash, completedTransaction);
+  });
+});
 
 const continueButtonDisabled = computed(() => {
   if (finalizeTransactionStatus.value !== "not-started") return true;
@@ -248,6 +267,8 @@ const buttonContinue = async () => {
         ...props.transaction.info,
         completed: true,
         toTransactionHash: finalizeTransactionHash.value! as string,
+        toTransactionSubmittedTimestamp:
+          props.transaction.info.toTransactionSubmittedTimestamp ?? new Date().toISOString(),
       },
     });
   }

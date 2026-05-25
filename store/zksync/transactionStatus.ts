@@ -21,6 +21,7 @@ export type TransactionInfo = {
   timestamp: string;
   info: {
     toTransactionHash?: string;
+    toTransactionSubmittedTimestamp?: string;
     expectedCompleteTimestamp?: string;
     withdrawalFinalizationAvailable?: boolean;
     failed?: boolean;
@@ -180,17 +181,61 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
         throw err;
       }
 
-      const isFinalized = await onboardStore
-        .getPublicClient()
-        .readContract({
-          address: eraNetwork.value.syscoinBridge.l1NullifierAddress,
-          abi: SYSCOIN_L1_NULLIFIER_ABI,
-          functionName: "isWithdrawalFinalized",
-          args: [finalizeParams.chainId, finalizeParams.l2BatchNumber, finalizeParams.l2MessageIndex],
-        })
-        // SYSCOIN: transient L1 RPC failures should not reject withdrawal
-        // polling. If the proof is ready, keep the claim UI available.
-        .catch(() => false);
+      const publicClient = onboardStore.getPublicClient();
+      const { l1NullifierAddress } = eraNetwork.value.syscoinBridge;
+      const readFinalizationStatus = () =>
+        publicClient
+          .readContract({
+            address: l1NullifierAddress,
+            abi: SYSCOIN_L1_NULLIFIER_ABI,
+            functionName: "isWithdrawalFinalized",
+            args: [finalizeParams.chainId, finalizeParams.l2BatchNumber, finalizeParams.l2MessageIndex],
+          })
+          .then((isFinalized) => ({ checked: true, isFinalized }))
+          // SYSCOIN: transient L1 RPC failures should not reject withdrawal
+          // polling. If the proof is ready, keep the claim UI available.
+          .catch(() => ({ checked: false, isFinalized: false }));
+      let finalizationStatus = await readFinalizationStatus();
+      let isFinalized = finalizationStatus.isFinalized;
+
+      if (!isFinalized && updatedTransaction.info.toTransactionHash) {
+        const claimReceipt = await publicClient
+          .getTransactionReceipt({ hash: updatedTransaction.info.toTransactionHash as Hash })
+          .catch((err: Error) => {
+            if (isTransactionNotFoundError(err)) return undefined;
+            throw err;
+          });
+        const claimSubmittedAt = updatedTransaction.info.toTransactionSubmittedTimestamp
+          ? Date.parse(updatedTransaction.info.toTransactionSubmittedTimestamp)
+          : undefined;
+        const claimTimedOut =
+          !claimReceipt &&
+          claimSubmittedAt !== undefined &&
+          Number.isFinite(claimSubmittedAt) &&
+          Date.now() - claimSubmittedAt > SYSCOIN_L1_RECEIPT_TIMEOUT;
+
+        if (claimReceipt && !isReceiptReverted(claimReceipt.status) && finalizationStatus.checked) {
+          // SYSCOIN: the claim may have mined after the first nullifier read.
+          // Re-check before treating a successful receipt as a cancelled/replaced tx.
+          finalizationStatus = await readFinalizationStatus();
+          isFinalized = finalizationStatus.isFinalized;
+        }
+        const claimSucceededWithoutFinalizing =
+          claimReceipt && !isReceiptReverted(claimReceipt.status) && finalizationStatus.checked && !isFinalized;
+
+        if (
+          (claimReceipt && isReceiptReverted(claimReceipt.status)) ||
+          claimTimedOut ||
+          claimSucceededWithoutFinalizing
+        ) {
+          // SYSCOIN: only clear a reverted stored claim if the nullifier still
+          // says the withdrawal is unfinalized. A successful replacement that
+          // does not finalize the nullifier is a cancellation/replacement, not
+          // an in-flight claim.
+          updatedTransaction.info.toTransactionHash = undefined;
+          updatedTransaction.info.toTransactionSubmittedTimestamp = undefined;
+        }
+      }
 
       updatedTransaction.info.failed = false;
       updatedTransaction.info.withdrawalFinalizationAvailable = !isFinalized;
@@ -230,11 +275,12 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
     transaction.info.completed = true;
     return transaction;
   };
-  const waitForCompletion = async (transaction: TransactionInfo) => {
+  const refreshTransactionStatus = async (transaction: TransactionInfo) => {
     // SYSCOIN: older local state may have marked a delayed deposit as failed
     // while the L2 priority transaction was still pending. Re-check failed
     // deposits so opening the transaction can recover and persist success.
     if (transaction.info.completed && !(transaction.type === "deposit" && transaction.info.failed)) return transaction;
+
     if (transaction.type === "deposit") {
       transaction = await getDepositStatus(transaction);
     } else if (transaction.type === "withdrawal") {
@@ -242,7 +288,21 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
     } else if (transaction.type === "transfer") {
       transaction = await getTransferStatus(transaction);
     }
-    if (transaction.type === "withdrawal" && transaction.info.withdrawalFinalizationAvailable) {
+    return transaction;
+  };
+  const refreshSavedTransactionStatus = async (transaction: TransactionInfo) => {
+    const updatedTransaction = await refreshTransactionStatus(transaction);
+    updateTransactionData(updatedTransaction.transactionHash, updatedTransaction);
+    return updatedTransaction;
+  };
+  const waitForCompletion = async (transaction: TransactionInfo) => {
+    transaction = await refreshTransactionStatus(transaction);
+
+    if (
+      transaction.type === "withdrawal" &&
+      transaction.info.withdrawalFinalizationAvailable &&
+      !transaction.info.toTransactionHash
+    ) {
       // SYSCOIN: claimable is a terminal polling state for manual L1
       // finalization; returning lets the UI persist and render the Claim button.
       return transaction;
@@ -291,5 +351,6 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
     saveTransaction,
     updateTransactionData,
     getTransaction,
+    refreshSavedTransactionStatus,
   };
 });

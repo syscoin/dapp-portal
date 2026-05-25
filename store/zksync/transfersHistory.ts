@@ -80,6 +80,19 @@ export const useZkSyncTransfersHistoryStore = defineStore("zkSyncTransfersHistor
     }
     return transfers.value;
   });
+  const refreshSyscoinCompletedTransfers = () => {
+    transfers.value = filterOutDuplicateTransfers(getSyscoinCompletedTransfers());
+  };
+  const refreshSyscoinLocalBridgeTransactions = () => {
+    for (const transaction of userTransactions.value.filter(
+      (transaction) => !transaction.info.completed || transaction.info.failed
+    )) {
+      transactionStatusStore
+        .refreshSavedTransactionStatus(transaction)
+        .then(refreshSyscoinCompletedTransfers)
+        .catch(() => undefined);
+    }
+  };
 
   const {
     canLoadMore,
@@ -105,7 +118,8 @@ export const useZkSyncTransfersHistoryStore = defineStore("zkSyncTransfersHistor
     async () => {
       if (isSyscoinBridgeNetwork(eraNetwork.value)) {
         resetPaginatedRequest();
-        transfers.value = filterOutDuplicateTransfers(getSyscoinCompletedTransfers());
+        refreshSyscoinCompletedTransfers();
+        refreshSyscoinLocalBridgeTransactions();
         return;
       }
 
@@ -128,7 +142,8 @@ export const useZkSyncTransfersHistoryStore = defineStore("zkSyncTransfersHistor
     async () => {
       if (isSyscoinBridgeNetwork(eraNetwork.value)) {
         resetPaginatedRequest();
-        transfers.value = filterOutDuplicateTransfers(getSyscoinCompletedTransfers());
+        refreshSyscoinCompletedTransfers();
+        refreshSyscoinLocalBridgeTransactions();
         return;
       }
 

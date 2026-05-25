@@ -137,6 +137,7 @@ export default (
             // SYSCOIN: estimate the exact transaction shape submitted in
             // useTransaction.ts, not the SDK bridge-helper calldata.
             return estimateGas(wagmiConfig, {
+              chainId: selectedNetwork.value.id,
               account: params!.from as `0x${string}`,
               ...buildSyscoinWithdrawTransaction({
                 l1Receiver: params!.to as `0x${string}`,
