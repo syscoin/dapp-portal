@@ -458,6 +458,15 @@ const defaultToken = computed(
     availableTokens.value.find((e) => e.address === baseToken.value?.l1Address) ?? availableTokens.value[0] ?? undefined
 );
 const selectedTokenAddress = ref<string | undefined>(routeTokenAddress.value ?? defaultToken.value?.address);
+watch(
+  [routeTokenAddress, defaultToken],
+  ([routeToken, defaultToken]) => {
+    if (routeToken || !selectedTokenAddress.value) {
+      selectedTokenAddress.value = routeToken ?? defaultToken?.address;
+    }
+  },
+  { immediate: true }
+);
 const selectedToken = computed<Token | undefined>(() => {
   if (!selectedTokenAddress.value) {
     return defaultToken.value;
