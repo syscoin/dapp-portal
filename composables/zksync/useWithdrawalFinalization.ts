@@ -109,11 +109,11 @@ export default (transactionInfo: ComputedRef<TransactionInfo>) => {
         account: onboardStore.account.address!,
         functionName: "finalizeWithdrawal",
         args: [
-          BigInt(normalizedParams.l1BatchNumber ?? 0n),
+          BigInt(normalizedParams.l1BatchNumber ?? normalizedParams.l2BatchNumber ?? 0n),
           BigInt(p.l2MessageIndex),
-          Number(normalizedParams.l2TxNumberInBlock) as number,
+          Number(normalizedParams.l2TxNumberInBlock ?? normalizedParams.l2TxNumberInBatch) as number,
           p.message as `0x${string}`,
-          normalizedParams.proof as readonly `0x${string}`[],
+          (normalizedParams.proof ?? normalizedParams.merkleProof) as readonly `0x${string}`[],
         ],
       } as const;
     } else {

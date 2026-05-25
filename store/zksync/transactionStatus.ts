@@ -142,7 +142,15 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
     if (isSyscoinBridgeNetwork(eraNetwork.value)) {
       const updatedTransaction = { ...transaction, info: { ...transaction.info } };
       const provider = await providerStore.requestProvider();
-      const receipt = await provider.getTransactionReceipt(transaction.transactionHash);
+      let receipt;
+      try {
+        receipt = await provider.getTransactionReceipt(transaction.transactionHash);
+      } catch (err) {
+        // SYSCOIN: a newly submitted withdrawal can be missing from the RPC
+        // briefly; keep polling instead of rejecting waitForCompletion.
+        if (isTransactionNotFoundError(err as Error)) return updatedTransaction;
+        throw err;
+      }
       if (!receipt) return updatedTransaction;
 
       if (isReceiptReverted(receipt.status)) {
