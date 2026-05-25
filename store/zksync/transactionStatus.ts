@@ -182,18 +182,21 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
       }
 
       const publicClient = onboardStore.getPublicClient();
-      const finalizationStatus = await publicClient
-        .readContract({
-          address: eraNetwork.value.syscoinBridge.l1NullifierAddress,
-          abi: SYSCOIN_L1_NULLIFIER_ABI,
-          functionName: "isWithdrawalFinalized",
-          args: [finalizeParams.chainId, finalizeParams.l2BatchNumber, finalizeParams.l2MessageIndex],
-        })
-        .then((isFinalized) => ({ checked: true, isFinalized }))
-        // SYSCOIN: transient L1 RPC failures should not reject withdrawal
-        // polling. If the proof is ready, keep the claim UI available.
-        .catch(() => ({ checked: false, isFinalized: false }));
-      const isFinalized = finalizationStatus.isFinalized;
+      const { l1NullifierAddress } = eraNetwork.value.syscoinBridge;
+      const readFinalizationStatus = () =>
+        publicClient
+          .readContract({
+            address: l1NullifierAddress,
+            abi: SYSCOIN_L1_NULLIFIER_ABI,
+            functionName: "isWithdrawalFinalized",
+            args: [finalizeParams.chainId, finalizeParams.l2BatchNumber, finalizeParams.l2MessageIndex],
+          })
+          .then((isFinalized) => ({ checked: true, isFinalized }))
+          // SYSCOIN: transient L1 RPC failures should not reject withdrawal
+          // polling. If the proof is ready, keep the claim UI available.
+          .catch(() => ({ checked: false, isFinalized: false }));
+      let finalizationStatus = await readFinalizationStatus();
+      let isFinalized = finalizationStatus.isFinalized;
 
       if (!isFinalized && updatedTransaction.info.toTransactionHash) {
         const claimReceipt = await publicClient
@@ -211,8 +214,14 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
           Number.isFinite(claimSubmittedAt) &&
           Date.now() - claimSubmittedAt > SYSCOIN_L1_RECEIPT_TIMEOUT;
 
+        if (claimReceipt && !isReceiptReverted(claimReceipt.status) && finalizationStatus.checked) {
+          // SYSCOIN: the claim may have mined after the first nullifier read.
+          // Re-check before treating a successful receipt as a cancelled/replaced tx.
+          finalizationStatus = await readFinalizationStatus();
+          isFinalized = finalizationStatus.isFinalized;
+        }
         const claimSucceededWithoutFinalizing =
-          claimReceipt && !isReceiptReverted(claimReceipt.status) && finalizationStatus.checked;
+          claimReceipt && !isReceiptReverted(claimReceipt.status) && finalizationStatus.checked && !isFinalized;
 
         if (
           (claimReceipt && isReceiptReverted(claimReceipt.status)) ||
