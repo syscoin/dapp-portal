@@ -20,6 +20,8 @@ export const SYSCOIN_DEFAULT_L2_GAS_LIMIT = 2_500_000n;
 // SYSCOIN: repeated native deposits can exceed 500k L1 gas once the bridge
 // state is warm/non-initial. Keep a margin above observed ~518k estimates.
 export const SYSCOIN_DEFAULT_L1_DEPOSIT_GAS_LIMIT = 700_000n;
+// SYSCOIN: ERC20 two-bridge deposits measured ~981k gas on Tanenbaum.
+export const SYSCOIN_DEFAULT_L1_ERC20_DEPOSIT_GAS_LIMIT = 1_300_000n;
 export const SYSCOIN_DEFAULT_L1_APPROVAL_GAS_LIMIT = 90_000n;
 // SYSCOIN: Tanenbaum L1 has ~150s blocks, so viem's 180s receipt
 // timeout is too close to the normal block interval for wallet UX.
