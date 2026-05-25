@@ -472,10 +472,18 @@ const defaultToken = computed(() => {
   );
 });
 const selectedTokenAddress = ref<string | undefined>(routeTokenAddress.value ?? defaultToken.value?.address);
+const getTokenId = (token: Token, tokenAddress = selectedTokenAddress.value): string => {
+  const hasMultipleL2Counterparts =
+    tokenAddress?.includes(token.address) && tokenAddress?.includes(String(token.l2Address));
+
+  return hasMultipleL2Counterparts ? `${token.address}-${token.l2Address}` : token.address;
+};
 watch(
   [routeTokenAddress, defaultToken, availableTokens],
   ([routeToken, defaultToken, availableTokens]) => {
-    const selectedTokenExists = availableTokens.some((token) => token.address === selectedTokenAddress.value);
+    const selectedTokenExists = [...availableTokens, ...availableBalances.value].some(
+      (token) => getTokenId(token) === selectedTokenAddress.value
+    );
     if (routeToken || !selectedTokenAddress.value || !selectedTokenExists) {
       selectedTokenAddress.value = routeToken ?? defaultToken?.address;
     }
@@ -486,16 +494,6 @@ const selectedToken = computed<Token | undefined>(() => {
   if (!selectedTokenAddress.value) {
     return defaultToken.value;
   }
-
-  // Handle special case for L1 tokens with multiple L2 counterparts (native and bridged)
-  // In the case of those tokens, we create the identifier by combining the L1 address and L2 address
-  const getTokenId = (token: Token): string => {
-    const hasMultipleL2Counterparts =
-      selectedTokenAddress.value?.includes(token.address) &&
-      selectedTokenAddress.value?.includes(String(token.l2Address));
-
-    return hasMultipleL2Counterparts ? `${token.address}-${token.l2Address}` : token.address;
-  };
 
   return (
     availableTokens.value.find((e) => getTokenId(e) === selectedTokenAddress.value) ||
