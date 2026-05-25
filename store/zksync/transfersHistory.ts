@@ -98,6 +98,7 @@ export const useZkSyncTransfersHistoryStore = defineStore("zkSyncTransfersHistor
   } = usePromise(
     async () => {
       if (isSyscoinBridgeNetwork(eraNetwork.value)) {
+        resetPaginatedRequest();
         transfers.value = filterOutDuplicateTransfers(getSyscoinCompletedTransfers());
         return;
       }
@@ -120,6 +121,7 @@ export const useZkSyncTransfersHistoryStore = defineStore("zkSyncTransfersHistor
   } = usePromise(
     async () => {
       if (isSyscoinBridgeNetwork(eraNetwork.value)) {
+        resetPaginatedRequest();
         transfers.value = filterOutDuplicateTransfers(getSyscoinCompletedTransfers());
         return;
       }
