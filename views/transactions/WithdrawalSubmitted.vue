@@ -231,6 +231,7 @@ watch(
   { immediate: true }
 );
 watch(finalizeTransactionHash, (hash) => {
+  if (!isSyscoinBridgeNetwork(eraNetwork.value)) return;
   if (!hash || props.transaction.info.toTransactionHash === hash) return;
   // SYSCOIN: persist the L1 claim tx as soon as the wallet submits it. Waiting
   // for the receipt leaves other pages able to offer a duplicate claim.
