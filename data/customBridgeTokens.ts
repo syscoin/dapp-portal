@@ -24,7 +24,7 @@ export const customBridgeTokens: CustomBridgeToken[] = [
   {
     chainId: 5700,
     l1Address: "0xA7ad827393EB60764D3d466b4D363D68602FD2D7",
-    l2Address: "0x83b8cDEBC57B60d400D5550C0FbB01e90DADd372",
+    l2Address: "0x83b8cdEbC57b60d400D5550C0Fbb01e90dADd372",
     bridges: [],
     symbol: "ZKSYS",
     bridgedSymbol: "ZKSYS",

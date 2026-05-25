@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 
+import { getAddress } from "viem";
 import { describe, it } from "vitest";
 
+import { customBridgeTokens } from "../data/customBridgeTokens";
 import {
   attachSyscoinL1MappingsToL2Tokens,
   mapSyscoinBlockscoutToken,
@@ -26,6 +28,13 @@ const officialTokens = [
 ];
 
 describe("syscoin Blockscout mapping", () => {
+  it("keeps custom bridge token addresses valid for viem", () => {
+    for (const token of customBridgeTokens) {
+      assert.doesNotThrow(() => getAddress(token.l1Address));
+      assert.doesNotThrow(() => getAddress(token.l2Address));
+    }
+  });
+
   it("maps L1 token listings and keeps official bridge metadata", () => {
     const token = mapSyscoinBlockscoutToken(
       {
@@ -155,7 +164,7 @@ describe("syscoin Blockscout mapping", () => {
 
     assert.equal(zksysToken.symbol, "ZKSYS");
     assert.equal(zksysToken.address, "0xA7ad827393EB60764D3d466b4D363D68602FD2D7");
-    assert.equal(zksysToken.l2Address, "0x83b8cDEBC57B60d400D5550C0FbB01e90DADd372");
+    assert.equal(zksysToken.l2Address, "0x83b8cdEbC57b60d400D5550C0Fbb01e90dADd372");
     assert.equal(zksysToken.iconUrl, "/img/zksys-icon.svg");
     assert.equal(zksysBalance.symbol, "ZKSYS");
     assert.equal(zksysBalance.amount, "0");
