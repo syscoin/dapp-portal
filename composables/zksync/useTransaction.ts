@@ -1,5 +1,5 @@
 import { useMemoize } from "@vueuse/core";
-import { getWalletClient, getPublicClient, prepareTransactionRequest, custom } from "@wagmi/core";
+import { getWalletClient, getPublicClient, prepareTransactionRequest, custom, sendTransaction } from "@wagmi/core";
 import { ethers, type BigNumberish, type ContractTransaction } from "ethers";
 import { createWalletClient, type Hash } from "viem";
 import { eip712WalletActions } from "viem/zksync";
@@ -103,14 +103,16 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
           l2Token: transaction.tokenAddress as `0x${string}`,
           amount: BigInt(transaction.amount.toString()),
         });
-        const txResponse = await signer.sendTransaction({
-          from: accountAddress,
+        const hash = await sendTransaction(wagmiConfig, {
+          chainId: selectedNetwork.value.id,
           ...syscoinWithdrawTx,
-          gasPrice: fee.gasPrice,
-          gasLimit: fee.gasLimit,
-        } as ethers.TransactionRequest);
+          account: accountAddress as `0x${string}`,
+          gasPrice: BigInt(fee.gasPrice.toString()),
+          gas: BigInt(fee.gasLimit.toString()),
+        });
 
-        transactionHash.value = txResponse.hash;
+        const txResponse = { hash };
+        transactionHash.value = hash;
         status.value = "done";
         return txResponse;
       }
@@ -169,6 +171,8 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
         });
         if (!wagmiPublicClient) throw new Error("Wagmi public client is not available");
 
+        // SYSCOIN: wagmiConfig can now contain standard-EVM Syscoin chains, so
+        // keep this Prividium-only ZKsync EIP-712 path explicitly typed.
         const prepared = await prepareTransactionRequest(wagmiConfig, {
           chain: wagmiClient.chain,
           account: wagmiClient.account,
@@ -177,7 +181,7 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
           data: txRequest.data as Hash,
           value: BigInt(txRequest.value || 0) as bigint,
           type: "eip712",
-        });
+        } as any);
 
         const client = createWalletClient({
           account: wagmiClient.account,
@@ -192,7 +196,7 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
         const signature = await client.signTransaction({
           ...prepared,
           type: "eip712",
-        });
+        } as any);
 
         const txResponse = {
           hash: await wagmiPublicClient.sendRawTransaction({ serializedTransaction: signature }),
