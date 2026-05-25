@@ -4,12 +4,12 @@
     :class="{ 'animated-button': displayTotalTokens }"
     variant="primary"
   >
-    <DestinationItem
-      :icon-url="destinations.ethereum.iconUrl"
-      as="RouterLink"
-      :to="{ name: 'bridge' }"
-      variant="primary"
-    >
+    <DestinationItem as="RouterLink" :to="{ name: 'bridge' }" variant="primary">
+      <template #image>
+        <DestinationIconContainer>
+          <img src="/img/syscoin-icon-white.svg" :alt="destinations.ethereum.label" class="h-7 w-7" />
+        </DestinationIconContainer>
+      </template>
       <template #label>
         <span class="text-white">Bridge from {{ eraNetwork.l1Network?.name }}</span>
       </template>
