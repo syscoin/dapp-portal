@@ -42,6 +42,7 @@ watch(
     transactionStatusStore.waitForCompletion(savedTransaction.value).then((_completedTransaction) => {
       if (route.params.hash === _completedTransaction.transactionHash) {
         completedTransaction.value = _completedTransaction;
+        transactionStatusStore.updateTransactionData(_completedTransaction.transactionHash, _completedTransaction);
       }
     });
   },

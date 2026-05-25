@@ -67,52 +67,56 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
     }
     throw new Error("No L2 transaction hash found");
   };
+  const isTransactionNotFoundError = (error: Error) => {
+    const message = error.message.toLowerCase();
+    return (
+      message.includes("not found") ||
+      message.includes("could not find") ||
+      message.includes("unknown transaction") ||
+      message.includes("missing transaction")
+    );
+  };
   const getDepositStatus = async (transaction: TransactionInfo) => {
-    try {
-      // Get L1 transaction receipt with retry logic for consistency
-      const publicClient = onboardStore.getPublicClient();
-      const l1Receipt = await retry(() =>
-        publicClient.waitForTransactionReceipt({
-          hash: transaction.transactionHash as Hash,
-        })
-      );
+    // Get L1 transaction receipt with retry logic for consistency
+    const publicClient = onboardStore.getPublicClient();
+    const l1Receipt = await retry(() =>
+      publicClient.waitForTransactionReceipt({
+        hash: transaction.transactionHash as Hash,
+      })
+    );
 
-      // Create a copy to avoid mutating the input parameter
-      const updatedTransaction = { ...transaction, info: { ...transaction.info } };
+    // Create a copy to avoid mutating the input parameter
+    const updatedTransaction = { ...transaction, info: { ...transaction.info } };
 
-      // If L1 transaction failed, mark the deposit as failed
-      if (l1Receipt.status === "reverted") {
-        updatedTransaction.info.failed = true;
-        updatedTransaction.info.completed = true;
-        return updatedTransaction;
-      }
-
-      // L1 transaction succeeded, extract L2 transaction hash from the same receipt
-      const l2TransactionHash = getDepositL2TransactionHash(l1Receipt);
-      const provider = await providerStore.requestProvider();
-      const l2TransactionReceipt = await provider.getTransactionReceipt(l2TransactionHash);
-      if (!l2TransactionReceipt) return updatedTransaction;
-
-      updatedTransaction.info.toTransactionHash = l2TransactionHash;
+    // If L1 transaction failed, mark the deposit as failed
+    if (l1Receipt.status === "reverted") {
+      updatedTransaction.info.failed = true;
       updatedTransaction.info.completed = true;
       return updatedTransaction;
+    }
+
+    // L1 transaction succeeded, extract L2 transaction hash from the same receipt
+    const l2TransactionHash = getDepositL2TransactionHash(l1Receipt);
+    const provider = await providerStore.requestProvider();
+    let l2TransactionReceipt;
+    try {
+      l2TransactionReceipt = await provider.getTransactionReceipt(l2TransactionHash);
     } catch (err) {
-      // Only mark as failed for specific transaction-related errors
-      // Network/RPC errors should be re-thrown to allow retry at higher level
-      const error = err as Error;
-      if (
-        error.message.includes("transaction") ||
-        error.message.includes("reverted") ||
-        error.message.includes("failed")
-      ) {
-        const updatedTransaction = { ...transaction, info: { ...transaction.info } };
-        updatedTransaction.info.failed = true;
-        updatedTransaction.info.completed = true;
-        return updatedTransaction;
-      }
-      // Re-throw network/infrastructure errors for retry at higher level
+      // SYSCOIN: priority deposits can take longer than the UI estimate to
+      // appear on L2. A missing L2 receipt is pending, not failed.
+      if (isTransactionNotFoundError(err as Error)) return updatedTransaction;
       throw err;
     }
+    if (!l2TransactionReceipt) return updatedTransaction;
+
+    updatedTransaction.info.toTransactionHash = l2TransactionHash;
+    if (l2TransactionReceipt.status === 0 || l2TransactionReceipt.status === "reverted") {
+      updatedTransaction.info.failed = true;
+    } else {
+      updatedTransaction.info.failed = false;
+    }
+    updatedTransaction.info.completed = true;
+    return updatedTransaction;
   };
   const getWithdrawalStatus = async (transaction: TransactionInfo) => {
     if (!transaction.info.withdrawalFinalizationAvailable) {
@@ -148,7 +152,10 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
     return transaction;
   };
   const waitForCompletion = async (transaction: TransactionInfo) => {
-    if (transaction.info.completed) return transaction;
+    // SYSCOIN: older local state may have marked a delayed deposit as failed
+    // while the L2 priority transaction was still pending. Re-check failed
+    // deposits so opening the transaction can recover and persist success.
+    if (transaction.info.completed && !(transaction.type === "deposit" && transaction.info.failed)) return transaction;
     if (transaction.type === "deposit") {
       transaction = await getDepositStatus(transaction);
     } else if (transaction.type === "withdrawal") {
