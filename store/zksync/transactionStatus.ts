@@ -168,12 +168,17 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
         throw err;
       }
 
-      const isFinalized = (await onboardStore.getPublicClient().readContract({
-        address: eraNetwork.value.syscoinBridge.l1NullifierAddress,
-        abi: SYSCOIN_L1_NULLIFIER_ABI,
-        functionName: "isWithdrawalFinalized",
-        args: [finalizeParams.chainId, finalizeParams.l2BatchNumber, finalizeParams.l2MessageIndex],
-      })) as boolean;
+      const isFinalized = await onboardStore
+        .getPublicClient()
+        .readContract({
+          address: eraNetwork.value.syscoinBridge.l1NullifierAddress,
+          abi: SYSCOIN_L1_NULLIFIER_ABI,
+          functionName: "isWithdrawalFinalized",
+          args: [finalizeParams.chainId, finalizeParams.l2BatchNumber, finalizeParams.l2MessageIndex],
+        })
+        // SYSCOIN: transient L1 RPC failures should not reject withdrawal
+        // polling. If the proof is ready, keep the claim UI available.
+        .catch(() => false);
 
       updatedTransaction.info.failed = false;
       updatedTransaction.info.withdrawalFinalizationAvailable = !isFinalized;
