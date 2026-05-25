@@ -16,7 +16,9 @@ import type { ZkSyncNetwork } from "@/data/networks";
 // SYSCOIN: constants mirror zksync-os-server's L1 priority transaction limits.
 export const SYSCOIN_REQUIRED_L1_TO_L2_GAS_PER_PUBDATA_BYTE = 800n;
 export const SYSCOIN_DEFAULT_L2_GAS_LIMIT = 2_500_000n;
-export const SYSCOIN_DEFAULT_L1_DEPOSIT_GAS_LIMIT = 500_000n;
+// SYSCOIN: repeated native deposits can exceed 500k L1 gas once the bridge
+// state is warm/non-initial. Keep a margin above observed ~518k estimates.
+export const SYSCOIN_DEFAULT_L1_DEPOSIT_GAS_LIMIT = 700_000n;
 export const SYSCOIN_DEFAULT_L1_APPROVAL_GAS_LIMIT = 90_000n;
 
 export const SYSCOIN_BRIDGEHUB_ABI = parseAbi([
