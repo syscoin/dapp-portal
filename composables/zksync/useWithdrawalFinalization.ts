@@ -5,7 +5,12 @@ import { IL1AssetRouter__factory as IL1AssetRouterFactory } from "zksync-ethers/
 
 import { L1_BRIDGE_ABI } from "@/data/abis/l1BridgeAbi";
 import { customBridgeTokens } from "@/data/customBridgeTokens";
-import { SYSCOIN_L1_NULLIFIER_ABI, isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
+import {
+  SYSCOIN_L1_NULLIFIER_ABI,
+  getSyscoinFinalizeWithdrawalParams,
+  isSyscoinBridgeNetwork,
+  type SyscoinFinalizeWithdrawalParams,
+} from "@/utils/syscoinBridge";
 
 import { useSentryLogger } from "../useSentryLogger";
 
@@ -38,7 +43,7 @@ export default (transactionInfo: ComputedRef<TransactionInfo>) => {
 
   const gasLimit = ref<bigint | undefined>();
   const gasPrice = ref<bigint | undefined>();
-  const finalizeWithdrawalParams = ref<FinalizeWithdrawalParams | undefined>();
+  const finalizeWithdrawalParams = ref<FinalizeWithdrawalParams | SyscoinFinalizeWithdrawalParams | undefined>();
 
   const totalFee = computed(() => {
     if (!gasLimit.value || !gasPrice.value) return undefined;
@@ -50,6 +55,15 @@ export default (transactionInfo: ComputedRef<TransactionInfo>) => {
 
   const getFinalizationParams = async () => {
     const provider = await providerStore.requestProvider();
+    if (isSyscoinBridgeNetwork(providerStore.eraNetwork)) {
+      // SYSCOIN: OS exposes withdrawal readiness through zks_getL2ToL1LogProof,
+      // not Era's zks_getTransactionDetails/l1BatchNumber receipt fields.
+      return await getSyscoinFinalizeWithdrawalParams(
+        provider,
+        transactionInfo.value.transactionHash as `0x${string}`,
+        providerStore.eraNetwork.id
+      );
+    }
     const wallet = new Wallet(
       // random private key cause we don't care about actual signer
       // finalizeWithdrawalParams method only exists on Wallet class
@@ -62,8 +76,11 @@ export default (transactionInfo: ComputedRef<TransactionInfo>) => {
   const getTransactionParams = async () => {
     finalizeWithdrawalParams.value = await getFinalizationParams();
     const provider = await providerStore.requestProvider();
-    const chainId = BigInt(await provider.getNetwork().then((n) => n.chainId));
+    const chainId = isSyscoinBridgeNetwork(providerStore.eraNetwork)
+      ? BigInt(providerStore.eraNetwork.id)
+      : BigInt(await provider.getNetwork().then((n) => n.chainId));
     const p = finalizeWithdrawalParams.value!;
+    const normalizedParams = p as any;
 
     // Check if this is a custom bridge withdrawal
     // First check if the token already has the bridge address stored
@@ -92,23 +109,23 @@ export default (transactionInfo: ComputedRef<TransactionInfo>) => {
         account: onboardStore.account.address!,
         functionName: "finalizeWithdrawal",
         args: [
-          BigInt(p.l1BatchNumber ?? 0n),
+          BigInt(normalizedParams.l1BatchNumber ?? normalizedParams.l2BatchNumber ?? 0n),
           BigInt(p.l2MessageIndex),
-          Number(p.l2TxNumberInBlock) as number,
+          Number(normalizedParams.l2TxNumberInBlock ?? normalizedParams.l2TxNumberInBatch) as number,
           p.message as `0x${string}`,
-          p.proof as readonly `0x${string}`[],
+          (normalizedParams.proof ?? normalizedParams.merkleProof) as readonly `0x${string}`[],
         ],
       } as const;
     } else {
       // Use standard bridge finalization through L1Nullifier
       const finalizeDepositParams = {
         chainId: BigInt(chainId),
-        l2BatchNumber: BigInt(p.l1BatchNumber ?? 0n),
+        l2BatchNumber: BigInt(normalizedParams.l1BatchNumber ?? normalizedParams.l2BatchNumber ?? 0n),
         l2MessageIndex: BigInt(p.l2MessageIndex),
-        l2Sender: p.sender as `0x${string}`,
-        l2TxNumberInBatch: Number(p.l2TxNumberInBlock),
+        l2Sender: (normalizedParams.sender ?? normalizedParams.l2Sender) as `0x${string}`,
+        l2TxNumberInBatch: Number(normalizedParams.l2TxNumberInBlock ?? normalizedParams.l2TxNumberInBatch),
         message: p.message,
-        merkleProof: p.proof,
+        merkleProof: normalizedParams.proof ?? normalizedParams.merkleProof,
       };
 
       return {
