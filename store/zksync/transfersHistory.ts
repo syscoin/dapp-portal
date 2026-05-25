@@ -1,13 +1,17 @@
 import usePaginatedRequest from "@/composables/zksync/usePaginatedRequest";
+import { isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
 
+import type { TransactionInfo } from "@/store/zksync/transactionStatus";
 import type { Api } from "@/types";
 
 const TRANSACTIONS_FETCH_LIMIT = 50;
 
 export const useZkSyncTransfersHistoryStore = defineStore("zkSyncTransfersHistory", () => {
   const onboardStore = useOnboardStore();
+  const transactionStatusStore = useZkSyncTransactionStatusStore();
   const { eraNetwork } = storeToRefs(useZkSyncProviderStore());
   const { account } = storeToRefs(onboardStore);
+  const { userTransactions } = storeToRefs(transactionStatusStore);
 
   const filterOutDuplicateTransfers = (transfers: Transfer[]) => {
     /*
@@ -45,6 +49,29 @@ export const useZkSyncTransfersHistoryStore = defineStore("zkSyncTransfersHistor
     }, [] as Transfer[]);
     return filteredTransfers.sort((a, b) => new Date(b.timestamp).valueOf() - new Date(a.timestamp).valueOf());
   };
+  const mapLocalBridgeTransaction = (transaction: TransactionInfo): Transfer => {
+    return {
+      transactionHash:
+        transaction.type === "deposit"
+          ? transaction.info.toTransactionHash || transaction.transactionHash
+          : transaction.transactionHash,
+      type: transaction.type,
+      from: transaction.from.address,
+      to: transaction.to.address,
+      fromNetwork: transaction.type === "deposit" ? "L1" : "L2",
+      toNetwork: transaction.type === "withdrawal" ? "L1" : "L2",
+      amount: transaction.token.amount.toString(),
+      token: transaction.token,
+      timestamp: transaction.timestamp,
+    };
+  };
+
+  const getSyscoinCompletedTransfers = () => {
+    // SYSCOIN: Blockscout does not expose ZKsync explorer's
+    // /address/:addr/transfers API. Use the persisted bridge-operation state
+    // that already tracks completion via L1 receipt + L2 receipt polling.
+    return userTransactions.value.filter((transaction) => transaction.info.completed).map(mapLocalBridgeTransaction);
+  };
 
   const {
     canLoadMore,
@@ -68,6 +95,11 @@ export const useZkSyncTransfersHistoryStore = defineStore("zkSyncTransfersHistor
     reload: reloadRecentTransfers,
   } = usePromise(
     async () => {
+      if (isSyscoinBridgeNetwork(eraNetwork.value)) {
+        transfers.value = filterOutDuplicateTransfers(getSyscoinCompletedTransfers());
+        return;
+      }
+
       if (transfers.value.length) {
         resetPaginatedRequest();
       }
@@ -85,6 +117,11 @@ export const useZkSyncTransfersHistoryStore = defineStore("zkSyncTransfersHistor
     reset: resetPreviousTransfersRequest,
   } = usePromise(
     async () => {
+      if (isSyscoinBridgeNetwork(eraNetwork.value)) {
+        transfers.value = filterOutDuplicateTransfers(getSyscoinCompletedTransfers());
+        return;
+      }
+
       const oldestTransferInTheList = transfers.value[transfers.value.length - 1];
       if (!oldestTransferInTheList) {
         return requestRecentTransfers();
