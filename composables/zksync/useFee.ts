@@ -90,6 +90,8 @@ export default (
   };
 
   const resetFee = () => {
+    // SYSCOIN: zero-balance curated tokens can reset max/fee state; clear the
+    // timed cache so switching back to TSYS recomputes native fee subtraction.
     cacheEstimateFee.clear();
     gasLimit.value = undefined;
     gasPrice.value = undefined;

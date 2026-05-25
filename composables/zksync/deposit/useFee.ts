@@ -206,6 +206,8 @@ export default (tokens: Ref<Token[]>, balances: Ref<TokenAmount[] | undefined>) 
       await cacheEstimateFee(params);
     },
     resetFee: () => {
+      // SYSCOIN: token switches can reset native max while a cached estimate is
+      // still valid; clear cache so fee/max state is repopulated.
       cacheEstimateFee.clear();
       fee.value = undefined;
     },

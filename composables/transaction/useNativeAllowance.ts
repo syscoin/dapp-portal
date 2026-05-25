@@ -69,9 +69,9 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
         isNativeToken.value = BigInt(eraNetwork.value.id) === originChainId;
       } catch {
         if (nonce !== allowanceCheckNonce) return;
-        // Some curated zero-balance tokens may have an L2 mapping before the
-        // token contract is deployed. Treat them as non-native for UI purposes
-        // instead of leaving the form stuck in allowance-checking state.
+        // SYSCOIN: curated zero-balance tokens may have an L2 mapping before
+        // the token contract is deployed. Treat them as non-native for UI
+        // purposes instead of leaving the form stuck in allowance checking.
         isNativeToken.value = false;
       } finally {
         if (nonce === allowanceCheckNonce) {

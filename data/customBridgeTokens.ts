@@ -21,6 +21,8 @@ export type CustomBridgeToken = {
 };
 
 export const customBridgeTokens: CustomBridgeToken[] = [
+  // SYSCOIN: curated official ZKSYS bridge token. The L2 token mapping exists
+  // before the token contract necessarily has bytecode or balances.
   {
     chainId: 5700,
     l1Address: "0xA7ad827393EB60764D3d466b4D363D68602FD2D7",
