@@ -196,7 +196,10 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
       if (!isFinalized && updatedTransaction.info.toTransactionHash) {
         const claimReceipt = await publicClient
           .getTransactionReceipt({ hash: updatedTransaction.info.toTransactionHash as Hash })
-          .catch(() => undefined);
+          .catch((err: Error) => {
+            if (isTransactionNotFoundError(err)) return undefined;
+            throw err;
+          });
         const claimSubmittedAt = updatedTransaction.info.toTransactionSubmittedTimestamp
           ? Date.parse(updatedTransaction.info.toTransactionSubmittedTimestamp)
           : undefined;
