@@ -4,10 +4,12 @@ import { utils } from "zksync-ethers";
 import { useSentryLogger } from "@/composables/useSentryLogger";
 import {
   SYSCOIN_BRIDGEHUB_ABI,
+  SYSCOIN_DEFAULT_L1_ERC20_DEPOSIT_GAS_LIMIT,
   SYSCOIN_DEFAULT_L1_DEPOSIT_GAS_LIMIT,
   SYSCOIN_DEFAULT_L2_GAS_LIMIT,
   SYSCOIN_REQUIRED_L1_TO_L2_GAS_PER_PUBDATA_BYTE,
   isSyscoinBridgeNetwork,
+  isSyscoinNativeToken,
 } from "@/utils/syscoinBridge";
 
 import type { Token, TokenAmount } from "@/types";
@@ -112,7 +114,10 @@ export default (tokens: Ref<Token[]>, balances: Ref<TokenAmount[] | undefined>) 
     return {
       gasPrice,
       baseCost,
-      l1GasLimit: SYSCOIN_DEFAULT_L1_DEPOSIT_GAS_LIMIT,
+      l1GasLimit:
+        params.tokenAddress && !isSyscoinNativeToken(params.tokenAddress)
+          ? SYSCOIN_DEFAULT_L1_ERC20_DEPOSIT_GAS_LIMIT
+          : SYSCOIN_DEFAULT_L1_DEPOSIT_GAS_LIMIT,
       l2GasLimit: SYSCOIN_DEFAULT_L2_GAS_LIMIT,
     };
   };
