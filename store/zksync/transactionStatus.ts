@@ -204,7 +204,10 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
           ? Date.parse(updatedTransaction.info.toTransactionSubmittedTimestamp)
           : undefined;
         const claimTimedOut =
-          !claimReceipt && (!claimSubmittedAt || Date.now() - claimSubmittedAt > SYSCOIN_L1_RECEIPT_TIMEOUT);
+          !claimReceipt &&
+          claimSubmittedAt !== undefined &&
+          Number.isFinite(claimSubmittedAt) &&
+          Date.now() - claimSubmittedAt > SYSCOIN_L1_RECEIPT_TIMEOUT;
 
         if ((claimReceipt && claimReceipt.status === "reverted") || claimTimedOut) {
           // SYSCOIN: only clear a reverted stored claim if the nullifier still
