@@ -80,14 +80,18 @@ export const useZkSyncTransfersHistoryStore = defineStore("zkSyncTransfersHistor
     }
     return transfers.value;
   });
-  const refreshSyscoinLocalBridgeTransactions = async () => {
-    await Promise.all(
-      userTransactions.value
-        .filter((transaction) => !transaction.info.completed || transaction.info.failed)
-        .map((transaction) =>
-          transactionStatusStore.refreshSavedTransactionStatus(transaction).catch(() => transaction)
-        )
-    );
+  const refreshSyscoinCompletedTransfers = () => {
+    transfers.value = filterOutDuplicateTransfers(getSyscoinCompletedTransfers());
+  };
+  const refreshSyscoinLocalBridgeTransactions = () => {
+    for (const transaction of userTransactions.value.filter(
+      (transaction) => !transaction.info.completed || transaction.info.failed
+    )) {
+      transactionStatusStore
+        .refreshSavedTransactionStatus(transaction)
+        .then(refreshSyscoinCompletedTransfers)
+        .catch(() => undefined);
+    }
   };
 
   const {
@@ -113,9 +117,9 @@ export const useZkSyncTransfersHistoryStore = defineStore("zkSyncTransfersHistor
   } = usePromise(
     async () => {
       if (isSyscoinBridgeNetwork(eraNetwork.value)) {
-        await refreshSyscoinLocalBridgeTransactions();
         resetPaginatedRequest();
-        transfers.value = filterOutDuplicateTransfers(getSyscoinCompletedTransfers());
+        refreshSyscoinCompletedTransfers();
+        refreshSyscoinLocalBridgeTransactions();
         return;
       }
 
@@ -137,9 +141,9 @@ export const useZkSyncTransfersHistoryStore = defineStore("zkSyncTransfersHistor
   } = usePromise(
     async () => {
       if (isSyscoinBridgeNetwork(eraNetwork.value)) {
-        await refreshSyscoinLocalBridgeTransactions();
         resetPaginatedRequest();
-        transfers.value = filterOutDuplicateTransfers(getSyscoinCompletedTransfers());
+        refreshSyscoinCompletedTransfers();
+        refreshSyscoinLocalBridgeTransactions();
         return;
       }
 
