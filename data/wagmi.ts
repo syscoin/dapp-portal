@@ -43,7 +43,9 @@ const formatZkSyncChain = (network: ZkSyncNetwork) => {
           },
         }
       : undefined,
-    ...chainConfig,
+    // SYSCOIN: zkSYS OS RPC accepts standard EVM transactions. Do not attach
+    // viem's ZKsync chain config, which adds zks_* RPC calls and EIP-712 txs.
+    ...(network.syscoinBridge ? {} : chainConfig),
   };
 };
 
