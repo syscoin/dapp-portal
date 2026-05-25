@@ -96,7 +96,16 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
     }
 
     // L1 transaction succeeded, extract L2 transaction hash from the same receipt
-    const l2TransactionHash = getDepositL2TransactionHash(l1Receipt);
+    let l2TransactionHash: Hash;
+    try {
+      l2TransactionHash = getDepositL2TransactionHash(l1Receipt);
+    } catch {
+      // SYSCOIN: a successful L1 deposit without a priority request hash cannot
+      // be tracked to L2; keep it terminally failed instead of rejecting polling.
+      updatedTransaction.info.failed = true;
+      updatedTransaction.info.completed = true;
+      return updatedTransaction;
+    }
     // SYSCOIN: if this is a re-check of an older false-failed deposit, a
     // successful L1 receipt means the operation is pending until L2 proves otherwise.
     updatedTransaction.info.failed = false;
