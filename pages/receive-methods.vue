@@ -31,7 +31,7 @@
           description="Receive testnet funds"
           icon-url="/img/faucet.svg"
           as="a"
-          href="https://faucet-zk.tanenbaum.io"
+          :href="faucetUrl"
           target="_blank"
           :icon="ArrowTopRightOnSquareIcon"
         />
@@ -80,6 +80,13 @@ const { destinations } = storeToRefs(useDestinationsStore());
 const { eraNetwork } = storeToRefs(useZkSyncProviderStore());
 const isMainnet = computed(() => eraNetwork.value.l1Network?.id === mainnet.id);
 const isTestnet = computed(() => eraNetwork.value.l1Network && eraNetwork.value.l1Network.id !== mainnet.id);
+const faucetUrl = computed(() =>
+  // SYSCOIN: Tanenbaum has its own faucet; keep upstream/custom testnets on
+  // the generic faucet docs instead of sending every testnet to Tanenbaum.
+  eraNetwork.value.syscoinBridge
+    ? "https://faucet-zk.tanenbaum.io"
+    : "https://docs.zksync.io/build/tooling/network-faucets.html"
+);
 </script>
 
 <style lang="scss" scoped></style>

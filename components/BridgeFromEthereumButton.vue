@@ -4,8 +4,8 @@
     :class="{ 'animated-button': displayTotalTokens }"
     variant="primary"
   >
-    <DestinationItem as="RouterLink" :to="{ name: 'bridge' }" variant="primary">
-      <template #image>
+    <DestinationItem :icon-url="bridgeSourceIconUrl" as="RouterLink" :to="{ name: 'bridge' }" variant="primary">
+      <template v-if="isSyscoinBridge" #image>
         <img src="/img/syscoin-icon-white.svg" :alt="destinations.ethereum.label" class="h-12 w-12 p-1.5" />
       </template>
       <template #label>
@@ -29,6 +29,13 @@ const zkSyncEthereumBalanceStore = useZkSyncEthereumBalanceStore();
 const { destinations } = storeToRefs(useDestinationsStore());
 const { eraNetwork } = storeToRefs(useZkSyncProviderStore());
 const { balance } = storeToRefs(zkSyncEthereumBalanceStore);
+
+const isSyscoinBridge = computed(() => !!eraNetwork.value.syscoinBridge);
+const bridgeSourceIconUrl = computed(() => {
+  // SYSCOIN: use the white mark only on the blue Syscoin primary CTA. Other
+  // upstream/custom L1 networks should keep their configured source icon.
+  return isSyscoinBridge.value ? undefined : destinations.value.ethereum.iconUrl;
+});
 
 const totalTokenBalance = computed(() => {
   if (!balance.value) {
