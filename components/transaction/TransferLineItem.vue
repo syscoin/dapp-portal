@@ -2,6 +2,7 @@
   <TransactionLineItem
     :icon="transactionIcon"
     :explorer-url="blockExplorerUrl"
+    :failed="failed"
     :transaction-hash="transfer.transactionHash!"
   >
     <template v-if="inProgress" #icon>
@@ -57,6 +58,10 @@ const props = defineProps({
     required: true,
   },
   inProgress: {
+    type: Boolean,
+    default: false,
+  },
+  failed: {
     type: Boolean,
     default: false,
   },

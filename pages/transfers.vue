@@ -33,6 +33,7 @@
             :key="index"
             :transfer="item"
             :in-progress="!item.completed"
+            :failed="item.failed"
             as="RouterLink"
             :to="{
               name: 'transaction-hash',
@@ -104,6 +105,7 @@ const { userTransactions } = storeToRefs(useZkSyncTransactionStatusStore());
 type RecentBridgeOperation = Transfer & {
   identifierTransactionHash: string;
   completed: boolean;
+  failed: boolean;
   finalizationAvailable?: boolean;
 };
 const recentBridgeOperations = computed<RecentBridgeOperation[]>(() => {
@@ -128,6 +130,7 @@ const recentBridgeOperations = computed<RecentBridgeOperation[]>(() => {
         token: tx.token,
         timestamp: tx.timestamp,
         completed: tx.info.completed,
+        failed: !!tx.info.failed,
         finalizationAvailable:
           tx.type === "withdrawal" ? !tx.info.completed && tx.info.withdrawalFinalizationAvailable : undefined,
       } as RecentBridgeOperation;
