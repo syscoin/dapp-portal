@@ -87,6 +87,8 @@
 <script lang="ts" setup>
 import { useIntersectionObserver } from "@vueuse/core";
 
+import { isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
+
 const onboardStore = useOnboardStore();
 const { eraNetwork } = storeToRefs(useZkSyncProviderStore());
 const transfersHistoryStore = useZkSyncTransfersHistoryStore();
@@ -113,7 +115,10 @@ const recentBridgeOperations = computed<RecentBridgeOperation[]>(() => {
     (tx) =>
       (tx.type === "withdrawal" &&
         (!tx.info.completed || new Date(tx.timestamp).getTime() + WITHDRAWAL_DELAY * 2 > new Date().getTime())) ||
-      (tx.type === "deposit" && new Date(tx.timestamp).getTime() + ESTIMATED_DEPOSIT_DELAY * 2 > new Date().getTime())
+      (tx.type === "deposit" &&
+        (isSyscoinBridgeNetwork(eraNetwork.value)
+          ? !tx.info.completed || !!tx.info.failed
+          : new Date(tx.timestamp).getTime() + ESTIMATED_DEPOSIT_DELAY * 2 > new Date().getTime()))
   );
 
   return [

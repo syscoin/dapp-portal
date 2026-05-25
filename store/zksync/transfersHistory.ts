@@ -74,6 +74,12 @@ export const useZkSyncTransfersHistoryStore = defineStore("zkSyncTransfersHistor
       .filter((transaction) => transaction.info.completed && !transaction.info.failed)
       .map(mapLocalBridgeTransaction);
   };
+  const displayedTransfers = computed(() => {
+    if (isSyscoinBridgeNetwork(eraNetwork.value)) {
+      return filterOutDuplicateTransfers(getSyscoinCompletedTransfers());
+    }
+    return transfers.value;
+  });
 
   const {
     canLoadMore,
@@ -145,7 +151,7 @@ export const useZkSyncTransfersHistoryStore = defineStore("zkSyncTransfersHistor
   });
 
   return {
-    transfers: computed(() => transfers.value),
+    transfers: displayedTransfers,
 
     recentTransfersRequestInProgress,
     recentTransfersRequestError,
