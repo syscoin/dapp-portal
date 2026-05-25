@@ -90,6 +90,7 @@ export default (
   };
 
   const resetFee = () => {
+    cacheEstimateFee.clear();
     gasLimit.value = undefined;
     gasPrice.value = undefined;
   };
