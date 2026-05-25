@@ -30,7 +30,7 @@ const savedTransaction = computed(() => {
   return transactionStatusStore.getTransaction(route.params.hash);
 });
 const transaction = computed(() => {
-  return completedTransaction.value || savedTransaction.value;
+  return savedTransaction.value || completedTransaction.value;
 });
 
 watch(
