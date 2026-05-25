@@ -9,6 +9,7 @@ import {
   mergeSyscoinTokens,
   resolveSyscoinL2TokenMappings,
 } from "../utils/syscoinBlockscout";
+import { AddressChainType, getBalancesWithCustomBridgeTokens, getTokensWithCustomBridgeTokens } from "../utils/helpers";
 
 const l1Dai = "0x2d2e508c8056c3D92745dC2C39E5Cc316de79C0F";
 const l2Dai = "0x4444444444444444444444444444444444444444";
@@ -96,6 +97,26 @@ describe("syscoin Blockscout mapping", () => {
     assert.equal(merged[0].symbol, "DAI.sys");
   });
 
+  it("keeps the native TSYS token in the L1 registry source", () => {
+    const [nativeToken] = mergeSyscoinTokens(
+      [
+        {
+          address: "0x0000000000000000000000000000000000000000",
+          l1Address: "0x0000000000000000000000000000000000000000",
+          l2Address: "0x000000000000000000000000000000000000800A",
+          symbol: "TSYS",
+          name: "Tanenbaum Syscoin",
+          decimals: 18,
+          iconUrl: "/img/syscoin-icon.svg",
+        },
+      ],
+      []
+    );
+
+    assert.equal(nativeToken.symbol, "TSYS");
+    assert.equal(nativeToken.address, "0x0000000000000000000000000000000000000000");
+  });
+
   it("resolves L1 to L2 mapping through the L2 AssetRouter", async () => {
     const publicClient = {
       readContract: async () => l2Dai,
@@ -126,5 +147,18 @@ describe("syscoin Blockscout mapping", () => {
 
     assert.equal(mappedToken.l1Address, l1Dai);
     assert.equal(mappedToken.l2Address, l2Dai);
+  });
+
+  it("injects curated Syscoin bridge tokens even without explorer balances", () => {
+    const [zksysToken] = getTokensWithCustomBridgeTokens([], AddressChainType.L1, 5700);
+    const [zksysBalance] = getBalancesWithCustomBridgeTokens([], AddressChainType.L1, 5700);
+
+    assert.equal(zksysToken.symbol, "ZKSYS");
+    assert.equal(zksysToken.address, "0xA7ad827393EB60764D3d466b4D363D68602FD2D7");
+    assert.equal(zksysToken.l2Address, "0x83b8cDEBC57B60d400D5550C0FbB01e90DADd372");
+    assert.equal(zksysToken.iconUrl, "/img/zksys-icon.svg");
+    assert.equal(zksysBalance.symbol, "ZKSYS");
+    assert.equal(zksysBalance.amount, "0");
+    assert.equal(zksysBalance.iconUrl, "/img/zksys-icon.svg");
   });
 });

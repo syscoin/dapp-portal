@@ -6,6 +6,7 @@ export type CustomBridgeToken = {
   bridgedSymbol: string;
   decimals: number;
   name?: string;
+  iconUrl?: string;
   bridgingDisabled?: true;
   hideAlertMessage?: true;
   learnMoreUrl?: string;
@@ -20,6 +21,18 @@ export type CustomBridgeToken = {
 };
 
 export const customBridgeTokens: CustomBridgeToken[] = [
+  {
+    chainId: 5700,
+    l1Address: "0xA7ad827393EB60764D3d466b4D363D68602FD2D7",
+    l2Address: "0x83b8cDEBC57B60d400D5550C0FbB01e90DADd372",
+    bridges: [],
+    symbol: "ZKSYS",
+    bridgedSymbol: "ZKSYS",
+    name: "ZKSYS",
+    iconUrl: "/img/zksys-icon.svg",
+    hideAlertMessage: true,
+    decimals: 18,
+  },
   {
     chainId: 1,
     l1Address: "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
