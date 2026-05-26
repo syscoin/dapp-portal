@@ -94,7 +94,10 @@ export const getSyscoinL2TransferFeeOverrides = (params: {
   suggestedMaxFeePerGas: bigint;
 }) => {
   const maxPriorityFeePerGas = SYSCOIN_DEFAULT_L2_PRIORITY_FEE;
-  const minimumMaxFeePerGas = params.baseFeePerGas ? params.baseFeePerGas + maxPriorityFeePerGas : 0n;
+  const minimumMaxFeePerGas =
+    params.baseFeePerGas !== null && params.baseFeePerGas !== undefined
+      ? params.baseFeePerGas + maxPriorityFeePerGas
+      : 0n;
 
   return {
     maxFeePerGas:
