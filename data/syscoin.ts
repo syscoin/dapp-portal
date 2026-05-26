@@ -1,6 +1,8 @@
-import { L2_BASE_TOKEN_ADDRESS } from "@/utils/constants";
+import { getAddress, isAddress } from "viem";
 
-import type { Token } from "@/types";
+import { L2_BASE_TOKEN_ADDRESS } from "../utils/constants";
+
+import type { Token } from "../types";
 
 // SYSCOIN: canonical Tanenbaum bridge constants shared by client config and
 // server-side registry caching.
@@ -14,6 +16,18 @@ export const syscoinTanenbaumBridge = {
   l1NullifierAddress: "0xa7d7381b7fb1ff64600d7a7215ddf2286a1c84ee",
   l2ChainId: 57057,
 } as const;
+
+export const SYSCOIN_TANENBAUM_FAUCET_URL = "https://faucet-zk.tanenbaum.io";
+
+export const getSyscoinTanenbaumFaucetUrl = (address?: string) => {
+  // SYSCOIN: rollups-faucet accepts an optional `address` query param. Only
+  // prefill it after wallet reconnect has produced a valid EVM address.
+  if (!address || !isAddress(address)) return SYSCOIN_TANENBAUM_FAUCET_URL;
+
+  const url = new URL(SYSCOIN_TANENBAUM_FAUCET_URL);
+  url.searchParams.set("address", getAddress(address));
+  return url.toString();
+};
 
 export const syscoinTanenbaumTokens: Token[] = [
   {
