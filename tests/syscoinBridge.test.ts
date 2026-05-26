@@ -9,6 +9,7 @@ import {
 } from "../data/syscoin";
 import {
   SYSCOIN_DEFAULT_L1_ERC20_DEPOSIT_GAS_LIMIT,
+  SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
   SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT,
   SYSCOIN_DEFAULT_L2_GAS_LIMIT,
   SYSCOIN_REQUIRED_L1_TO_L2_GAS_PER_PUBDATA_BYTE,
@@ -23,6 +24,7 @@ import {
   encodeSyscoinErc20Deposit,
   encodeSyscoinTsysDeposit,
   getSyscoinFinalizeWithdrawalParams,
+  getSyscoinL2TransferFeeOverrides,
 } from "../utils/syscoinBridge";
 
 const chainId = 57_057n;
@@ -46,6 +48,59 @@ describe("syscoin bridge encoding", () => {
 
   it("keeps account transfer gas floor above observed Tanenbaum estimate", () => {
     assert.equal(SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT, 65_000n);
+  });
+
+  it("caps Syscoin transfer priority fee below the max fee", () => {
+    assert.deepEqual(
+      getSyscoinL2TransferFeeOverrides({
+        baseFeePerGas: 375_000_000_000n,
+        suggestedMaxFeePerGas: 562_500_000_000n,
+      }),
+      {
+        maxFeePerGas: 562_500_000_000n,
+        maxPriorityFeePerGas: SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
+      }
+    );
+    assert.deepEqual(
+      getSyscoinL2TransferFeeOverrides({
+        baseFeePerGas: 375_000_000_000n,
+        suggestedMaxFeePerGas: 376_000_000_000n,
+      }),
+      {
+        maxFeePerGas: 380_000_000_000n,
+        maxPriorityFeePerGas: SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
+      }
+    );
+    assert.deepEqual(
+      getSyscoinL2TransferFeeOverrides({
+        baseFeePerGas: 0n,
+        suggestedMaxFeePerGas: 1_000_000_000n,
+      }),
+      {
+        maxFeePerGas: SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
+        maxPriorityFeePerGas: SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
+      }
+    );
+    assert.deepEqual(
+      getSyscoinL2TransferFeeOverrides({
+        baseFeePerGas: undefined,
+        suggestedMaxFeePerGas: 562_500_000_000n,
+      }),
+      {
+        maxFeePerGas: 562_500_000_000n,
+        maxPriorityFeePerGas: SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
+      }
+    );
+    assert.deepEqual(
+      getSyscoinL2TransferFeeOverrides({
+        baseFeePerGas: undefined,
+        suggestedMaxFeePerGas: 1_000_000_000n,
+      }),
+      {
+        maxFeePerGas: SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
+        maxPriorityFeePerGas: SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
+      }
+    );
   });
 
   it("builds TSYS Bridgehub direct deposit requests", () => {
