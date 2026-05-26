@@ -34,16 +34,21 @@ export const useOnboardStore = defineStore("onboard", () => {
     if (!walletName.value) return false;
     return !confirmedSupportedWallets.find((wallet) => wallet === walletName.value);
   });
+  const normalizeWalletName = (name?: string) => name?.replace(/ Wallet$/, "").trim() || undefined;
   const identifyWalletName = async () => {
     const { connector } = getAccount(wagmiConfig);
     const provider = await connector?.getProvider?.();
-    const name = (provider as any)?.session?.peer?.metadata?.name;
-    if ((provider as any)?.isMetaMask) {
+    const walletConnectName = normalizeWalletName((provider as any)?.session?.peer?.metadata?.name);
+    const connectorDisplayName = normalizeWalletName(connector?.name);
+
+    if (walletConnectName) {
+      walletName.value = walletConnectName;
+    } else if (connector?.name !== "WalletConnect" && connectorDisplayName) {
+      walletName.value = connectorDisplayName;
+    } else if ((provider as any)?.isMetaMask) {
       walletName.value = "MetaMask";
-    } else if (!name && connector?.name !== "WalletConnect") {
-      walletName.value = connector?.name.replace(/ Wallet$/, "").trim();
     } else {
-      walletName.value = name?.replace(/ Wallet$/, "").trim();
+      walletName.value = connectorDisplayName;
     }
 
     if (walletName.value && connector) {
@@ -169,7 +174,7 @@ export const useOnboardStore = defineStore("onboard", () => {
 
   return {
     account: computed(() => account.value),
-    // SYSCOIN: fresh MetaMask reconnects can transiently report connected
+    // SYSCOIN: fresh wallet reconnects can transiently report connected
     // without a usable account address, which triggers bridge balance fetches.
     isConnected: computed(() => !!account.value.address && isAddress(account.value.address)),
     isConnectingWallet: computed(() => account.value.isReconnecting), // isConnecting already has a web3modal overlay

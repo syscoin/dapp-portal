@@ -120,7 +120,7 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
           ...syscoinTx,
           account: accountAddress as `0x${string}`,
           gas: BigInt(fee.gasLimit.toString()),
-          // SYSCOIN: for account transfers, MetaMask's network-suggested EIP-1559
+          // SYSCOIN: for account transfers, the wallet's network-suggested EIP-1559
           // fees are more reliable than a legacy site-suggested gasPrice.
           ...(transaction.type === "transfer" ? {} : { gasPrice: BigInt(fee.gasPrice.toString()) }),
         });

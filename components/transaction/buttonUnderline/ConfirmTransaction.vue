@@ -1,6 +1,6 @@
 <template>
   <CommonButtonUnderlineText :opened="opened">
-    Confirm this transaction in your {{ walletName }} wallet
+    Confirm this transaction in your {{ walletLabel }}
   </CommonButtonUnderlineText>
 </template>
 
@@ -13,4 +13,5 @@ defineProps({
 });
 
 const { walletName } = storeToRefs(useOnboardStore());
+const walletLabel = computed(() => (walletName.value ? `${walletName.value} wallet` : "wallet"));
 </script>
