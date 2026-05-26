@@ -46,16 +46,6 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
   );
   const { validateAddress } = useScreening();
 
-  const getSyscoinTransferFeeOverrides = async (suggestedMaxFeePerGas: bigint) => {
-    const publicClient = getPublicClient(wagmiConfig, { chainId: selectedNetwork.value.id });
-    const latestBlock = await publicClient?.getBlock().catch(() => undefined);
-
-    return getSyscoinL2TransferFeeOverrides({
-      baseFeePerGas: latestBlock?.baseFeePerGas,
-      suggestedMaxFeePerGas,
-    });
-  };
-
   // We need to calculate gas limit with custom function since the new version of the SDK fails
   const getCustomWithdrawTx = async (transaction: {
     token: Address;
@@ -128,7 +118,9 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
               });
         const syscoinFeeOverrides =
           transaction.type === "transfer"
-            ? await getSyscoinTransferFeeOverrides(BigInt(fee.gasPrice.toString()))
+            ? getSyscoinL2TransferFeeOverrides({
+                suggestedMaxFeePerGas: BigInt(fee.gasPrice.toString()),
+              })
             : { gasPrice: BigInt(fee.gasPrice.toString()) };
         const hash = await sendTransaction(wagmiConfig, {
           chainId: selectedNetwork.value.id,

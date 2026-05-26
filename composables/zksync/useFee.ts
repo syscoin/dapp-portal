@@ -1,4 +1,4 @@
-import { estimateGas } from "@wagmi/core";
+import { estimateGas, getPublicClient } from "@wagmi/core";
 import { AbiCoder } from "ethers";
 import { encodeFunctionData } from "viem";
 import { EIP712_TX_TYPE } from "zksync-ethers/build/utils";
@@ -8,6 +8,7 @@ import {
   SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT,
   buildSyscoinTransferTransaction,
   buildSyscoinWithdrawTransaction,
+  getSyscoinL2TransferFeeOverrides,
   isSyscoinL2BaseToken,
   isSyscoinBridgeNetwork,
 } from "@/utils/syscoinBridge";
@@ -211,7 +212,16 @@ export default (
         }),
       ]);
 
-      gasPrice.value = price;
+      if (isSyscoinBridgeNetwork(selectedNetwork.value) && params.type === "transfer") {
+        const publicClient = getPublicClient(wagmiConfig, { chainId: selectedNetwork.value.id });
+        const latestBlock = await publicClient?.getBlock().catch(() => undefined);
+        gasPrice.value = getSyscoinL2TransferFeeOverrides({
+          baseFeePerGas: latestBlock?.baseFeePerGas,
+          suggestedMaxFeePerGas: BigInt(price.toString()),
+        }).maxFeePerGas;
+      } else {
+        gasPrice.value = price;
+      }
       gasLimit.value = limit;
     },
     { cache: false }
