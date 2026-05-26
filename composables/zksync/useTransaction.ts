@@ -10,6 +10,7 @@ import { L2_BASE_TOKEN_ADDRESS } from "@/utils/constants";
 import {
   buildSyscoinTransferTransaction,
   buildSyscoinWithdrawTransaction,
+  getSyscoinL2TransferFeeOverrides,
   isSyscoinBridgeNetwork,
 } from "@/utils/syscoinBridge";
 import { wagmiConfig } from "~/data/wagmi";
@@ -44,6 +45,16 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
     getProvider().then((provider) => provider.getDefaultBridgeAddresses())
   );
   const { validateAddress } = useScreening();
+
+  const getSyscoinTransferFeeOverrides = async (suggestedMaxFeePerGas: bigint) => {
+    const publicClient = getPublicClient(wagmiConfig, { chainId: selectedNetwork.value.id });
+    const latestBlock = await publicClient?.getBlock().catch(() => undefined);
+
+    return getSyscoinL2TransferFeeOverrides({
+      baseFeePerGas: latestBlock?.baseFeePerGas,
+      suggestedMaxFeePerGas,
+    });
+  };
 
   // We need to calculate gas limit with custom function since the new version of the SDK fails
   const getCustomWithdrawTx = async (transaction: {
@@ -115,14 +126,18 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
                 l2Token: transaction.tokenAddress as `0x${string}`,
                 amount: BigInt(transaction.amount.toString()),
               });
+        const syscoinFeeOverrides =
+          transaction.type === "transfer"
+            ? await getSyscoinTransferFeeOverrides(BigInt(fee.gasPrice.toString()))
+            : { gasPrice: BigInt(fee.gasPrice.toString()) };
         const hash = await sendTransaction(wagmiConfig, {
           chainId: selectedNetwork.value.id,
           ...syscoinTx,
           account: accountAddress as `0x${string}`,
           gas: BigInt(fee.gasLimit.toString()),
-          // SYSCOIN: for account transfers, the wallet's network-suggested EIP-1559
-          // fees are more reliable than a legacy site-suggested gasPrice.
-          ...(transaction.type === "transfer" ? {} : { gasPrice: BigInt(fee.gasPrice.toString()) }),
+          // SYSCOIN: set EIP-1559 caps for account transfers so wallets do not
+          // turn the full max fee into an excessive priority tip.
+          ...syscoinFeeOverrides,
         });
 
         const txResponse = { hash };

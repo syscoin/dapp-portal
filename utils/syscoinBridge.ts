@@ -26,6 +26,9 @@ export const SYSCOIN_DEFAULT_L1_APPROVAL_GAS_LIMIT = 90_000n;
 // SYSCOIN: Tanenbaum account transfers can revert when the RPC estimates
 // around 40k gas. Pali succeeds with ~65k, so keep that as a transfer floor.
 export const SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT = 65_000n;
+// SYSCOIN: zkSYS RPC currently returns 0 for priority fee suggestions, while
+// MetaMask can incorrectly set the whole max fee as the priority fee.
+export const SYSCOIN_DEFAULT_L2_PRIORITY_FEE = 5_000_000_000n;
 // SYSCOIN: Tanenbaum L1 has ~150s blocks, so viem's 180s receipt
 // timeout is too close to the normal block interval for wallet UX.
 export const SYSCOIN_L1_RECEIPT_TIMEOUT = 15 * 60_000;
@@ -84,6 +87,20 @@ export const isSyscoinNativeToken = (tokenAddress: string) => {
 
 export const isSyscoinL2BaseToken = (tokenAddress: string) => {
   return isAddressEqual(getAddress(tokenAddress), getAddress(L2_BASE_TOKEN_ADDRESS));
+};
+
+export const getSyscoinL2TransferFeeOverrides = (params: {
+  baseFeePerGas?: bigint | null;
+  suggestedMaxFeePerGas: bigint;
+}) => {
+  const maxPriorityFeePerGas = SYSCOIN_DEFAULT_L2_PRIORITY_FEE;
+  const minimumMaxFeePerGas = params.baseFeePerGas ? params.baseFeePerGas + maxPriorityFeePerGas : 0n;
+
+  return {
+    maxFeePerGas:
+      params.suggestedMaxFeePerGas > minimumMaxFeePerGas ? params.suggestedMaxFeePerGas : minimumMaxFeePerGas,
+    maxPriorityFeePerGas,
+  };
 };
 
 export const buildSyscoinL2BaseTokenWithdrawData = (l1Receiver: Address) => {
