@@ -9,6 +9,13 @@ export default defineNuxtConfig({
       },
       link: [
         {
+          // SYSCOIN: pin browser tabs to the zkSYS favicon instead of the
+          // upstream/default ZKsync icon fallback.
+          rel: "icon",
+          type: "image/png",
+          href: "/icon.png",
+        },
+        {
           rel: "stylesheet",
           href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
         },
