@@ -9,6 +9,7 @@ import {
 } from "../data/syscoin";
 import {
   SYSCOIN_DEFAULT_L1_ERC20_DEPOSIT_GAS_LIMIT,
+  SYSCOIN_DEFAULT_L2_MAX_FEE_FALLBACK,
   SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
   SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT,
   SYSCOIN_DEFAULT_L2_GAS_LIMIT,
@@ -87,7 +88,7 @@ describe("syscoin bridge encoding", () => {
         suggestedMaxFeePerGas: 1_000_000_000n,
       }),
       {
-        maxFeePerGas: SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
+        maxFeePerGas: SYSCOIN_DEFAULT_L2_MAX_FEE_FALLBACK,
         maxPriorityFeePerGas: SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
       }
     );
