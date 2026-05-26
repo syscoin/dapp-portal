@@ -4,6 +4,10 @@ import { encodeAbiParameters, toEventSelector, toFunctionSelector } from "viem";
 import { describe, it } from "vitest";
 
 import {
+  getSyscoinTanenbaumFaucetUrl,
+  SYSCOIN_TANENBAUM_FAUCET_URL,
+} from "../data/syscoin";
+import {
   SYSCOIN_DEFAULT_L1_ERC20_DEPOSIT_GAS_LIMIT,
   SYSCOIN_DEFAULT_L2_GAS_LIMIT,
   SYSCOIN_REQUIRED_L1_TO_L2_GAS_PER_PUBDATA_BYTE,
@@ -27,6 +31,12 @@ const amount = 1_000_000_000_000_000_000n;
 const baseCost = 42_000_000_000_000n;
 
 describe("syscoin bridge encoding", () => {
+  it("prefills the Tanenbaum faucet only for valid wallet addresses", () => {
+    assert.equal(getSyscoinTanenbaumFaucetUrl(), SYSCOIN_TANENBAUM_FAUCET_URL);
+    assert.equal(getSyscoinTanenbaumFaucetUrl("undefined"), SYSCOIN_TANENBAUM_FAUCET_URL);
+    assert.equal(getSyscoinTanenbaumFaucetUrl(receiver), `${SYSCOIN_TANENBAUM_FAUCET_URL}/?address=${receiver}`);
+  });
+
   it("keeps ERC20 deposit L1 gas limit above observed two-bridge cost", () => {
     assert.equal(SYSCOIN_DEFAULT_L1_ERC20_DEPOSIT_GAS_LIMIT, 1_300_000n);
   });

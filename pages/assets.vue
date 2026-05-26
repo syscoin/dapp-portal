@@ -130,12 +130,13 @@ import {
 import { mainnet } from "viem/chains";
 
 import useEcosystemBanner from "@/composables/zksync/deposit/useEcosystemBanner";
+import { getSyscoinTanenbaumFaucetUrl } from "@/data/syscoin";
 
 import type { FunctionalComponent } from "vue";
 
 const onboardStore = useOnboardStore();
 const walletStore = useZkSyncWalletStore();
-const { isConnected } = storeToRefs(onboardStore);
+const { account, isConnected } = storeToRefs(onboardStore);
 const { balance, balanceInProgress, balanceError } = storeToRefs(walletStore);
 const { destinations } = storeToRefs(useDestinationsStore());
 const { eraNetwork } = storeToRefs(useZkSyncProviderStore());
@@ -173,14 +174,20 @@ const depositMethods = computed(() => {
 
   const isMainnet = eraNetwork.value.l1Network?.id === mainnet.id;
   const isTestnet = eraNetwork.value.l1Network && eraNetwork.value.l1Network.id !== mainnet.id;
-  if (isTestnet && eraNetwork.value.displaySettings?.showPartnerLinks) {
+  const showFaucet =
+    isTestnet && (eraNetwork.value.syscoinBridge || eraNetwork.value.displaySettings?.showPartnerLinks);
+  if (showFaucet) {
     methods.push({
       props: {
         iconUrl: "/img/faucet.svg",
         label: "Faucet",
         description: "Receive testnet funds",
         as: "a",
-        href: "https://docs.syscoin.org",
+        // SYSCOIN: prefill rollups-faucet with the connected address only
+        // after wallet reconnect has produced a valid account.
+        href: eraNetwork.value.syscoinBridge
+          ? getSyscoinTanenbaumFaucetUrl(isConnected.value ? account.value.address : undefined)
+          : "https://docs.syscoin.org",
         target: "_blank",
         icon: ArrowTopRightOnSquareIcon,
       },

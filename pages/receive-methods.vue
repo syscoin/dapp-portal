@@ -76,15 +76,18 @@
 import { ArrowsUpDownIcon, ArrowTopRightOnSquareIcon, BanknotesIcon, QrCodeIcon } from "@heroicons/vue/24/outline";
 import { mainnet } from "viem/chains";
 
+import { getSyscoinTanenbaumFaucetUrl } from "@/data/syscoin";
+
 const { destinations } = storeToRefs(useDestinationsStore());
 const { eraNetwork } = storeToRefs(useZkSyncProviderStore());
+const { account, isConnected } = storeToRefs(useOnboardStore());
 const isMainnet = computed(() => eraNetwork.value.l1Network?.id === mainnet.id);
 const isTestnet = computed(() => eraNetwork.value.l1Network && eraNetwork.value.l1Network.id !== mainnet.id);
 const faucetUrl = computed(() =>
   // SYSCOIN: Tanenbaum has its own faucet; keep upstream/custom testnets on
   // the generic faucet docs instead of sending every testnet to Tanenbaum.
   eraNetwork.value.syscoinBridge
-    ? "https://faucet-zk.tanenbaum.io"
+    ? getSyscoinTanenbaumFaucetUrl(isConnected.value ? account.value.address : undefined)
     : "https://docs.zksync.io/build/tooling/network-faucets.html"
 );
 </script>
