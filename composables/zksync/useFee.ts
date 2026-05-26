@@ -136,7 +136,7 @@ export default (
 
       const [price, limit] = await Promise.all([
         retry(() => provider.getGasPrice()),
-        retry(() => {
+        retry(async () => {
           const isCustomBridgeToken = !!token?.l2BridgeAddress;
           if (isSyscoinBridgeNetwork(selectedNetwork.value)) {
             // SYSCOIN: estimate the exact standard-EVM transaction shape
