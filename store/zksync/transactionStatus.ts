@@ -266,8 +266,23 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
   };
   const getTransferStatus = async (transaction: TransactionInfo) => {
     const provider = await providerStore.requestProvider();
-    const transactionReceipt = await provider.getTransactionReceipt(transaction.transactionHash);
+    const updatedTransaction = { ...transaction, info: { ...transaction.info } };
+    let transactionReceipt;
+    try {
+      transactionReceipt = await provider.getTransactionReceipt(transaction.transactionHash);
+    } catch (err) {
+      if (isTransactionNotFoundError(err as Error)) return updatedTransaction;
+      throw err;
+    }
     if (!transactionReceipt) return transaction;
+    if (isSyscoinBridgeNetwork(eraNetwork.value)) {
+      // SYSCOIN: zkSYS RPC does not expose zks_getTransactionDetails. The EVM
+      // receipt status is the terminal source of truth for account transfers.
+      updatedTransaction.info.failed = isReceiptReverted(transactionReceipt.status);
+      updatedTransaction.info.completed = true;
+      return updatedTransaction;
+    }
+
     const transactionDetails = await provider.getTransactionDetails(transaction.transactionHash);
     if (transactionDetails.status === "failed") {
       transaction.info.failed = true;

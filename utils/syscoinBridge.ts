@@ -23,6 +23,9 @@ export const SYSCOIN_DEFAULT_L1_DEPOSIT_GAS_LIMIT = 700_000n;
 // SYSCOIN: ERC20 two-bridge deposits measured ~981k gas on Tanenbaum.
 export const SYSCOIN_DEFAULT_L1_ERC20_DEPOSIT_GAS_LIMIT = 1_300_000n;
 export const SYSCOIN_DEFAULT_L1_APPROVAL_GAS_LIMIT = 90_000n;
+// SYSCOIN: Tanenbaum ERC20 transfers can revert when the RPC estimates around
+// 40k gas. Pali succeeds with 65k, so keep that as a floor for token sends.
+export const SYSCOIN_DEFAULT_L2_ERC20_TRANSFER_GAS_LIMIT = 65_000n;
 // SYSCOIN: Tanenbaum L1 has ~150s blocks, so viem's 180s receipt
 // timeout is too close to the normal block interval for wallet UX.
 export const SYSCOIN_L1_RECEIPT_TIMEOUT = 15 * 60_000;
@@ -79,6 +82,10 @@ export const isSyscoinNativeToken = (tokenAddress: string) => {
   return isAddressEqual(getAddress(tokenAddress), zeroAddress);
 };
 
+export const isSyscoinL2BaseToken = (tokenAddress: string) => {
+  return isAddressEqual(getAddress(tokenAddress), getAddress(L2_BASE_TOKEN_ADDRESS));
+};
+
 export const buildSyscoinL2BaseTokenWithdrawData = (l1Receiver: Address) => {
   return encodeFunctionData({
     abi: SYSCOIN_L2_BASE_TOKEN_ABI,
@@ -104,7 +111,7 @@ export const buildSyscoinErc20TransferData = (recipient: Address, amount: bigint
 };
 
 export const buildSyscoinTransferTransaction = (params: { recipient: Address; l2Token: Address; amount: bigint }) => {
-  const isBaseToken = isAddressEqual(getAddress(params.l2Token), getAddress(L2_BASE_TOKEN_ADDRESS));
+  const isBaseToken = isSyscoinL2BaseToken(params.l2Token);
 
   return {
     to: (isBaseToken ? params.recipient : params.l2Token) as Address,
@@ -114,7 +121,7 @@ export const buildSyscoinTransferTransaction = (params: { recipient: Address; l2
 };
 
 export const buildSyscoinWithdrawTransaction = (params: { l1Receiver: Address; l2Token: Address; amount: bigint }) => {
-  const isBaseToken = isAddressEqual(getAddress(params.l2Token), getAddress(L2_BASE_TOKEN_ADDRESS));
+  const isBaseToken = isSyscoinL2BaseToken(params.l2Token);
 
   return {
     to: (isBaseToken ? L2_BASE_TOKEN_ADDRESS : L2_ASSET_ROUTER_ADDRESS) as Address,

@@ -5,8 +5,10 @@ import { EIP712_TX_TYPE } from "zksync-ethers/build/utils";
 
 import { wagmiConfig } from "@/data/wagmi";
 import {
+  SYSCOIN_DEFAULT_L2_ERC20_TRANSFER_GAS_LIMIT,
   buildSyscoinTransferTransaction,
   buildSyscoinWithdrawTransaction,
+  isSyscoinL2BaseToken,
   isSyscoinBridgeNetwork,
 } from "@/utils/syscoinBridge";
 
@@ -152,11 +154,17 @@ export default (
                     l2Token: params!.tokenAddress as `0x${string}`,
                     amount: BigInt(params!.amount),
                   });
-            return estimateGas(wagmiConfig, {
+            const estimatedGas = await estimateGas(wagmiConfig, {
               chainId: selectedNetwork.value.id,
               account: params!.from as `0x${string}`,
               ...transaction,
             });
+            if (params!.type === "transfer" && !isSyscoinL2BaseToken(params!.tokenAddress)) {
+              return estimatedGas > SYSCOIN_DEFAULT_L2_ERC20_TRANSFER_GAS_LIMIT
+                ? estimatedGas
+                : SYSCOIN_DEFAULT_L2_ERC20_TRANSFER_GAS_LIMIT;
+            }
+            return estimatedGas;
           } else if (isCustomBridgeToken) {
             return getCustomGasLimit({
               from: params!.from,
