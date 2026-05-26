@@ -81,6 +81,16 @@ describe("syscoin bridge encoding", () => {
         maxPriorityFeePerGas: SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
       }
     );
+    assert.deepEqual(
+      getSyscoinL2TransferFeeOverrides({
+        baseFeePerGas: undefined,
+        suggestedMaxFeePerGas: 1_000_000_000n,
+      }),
+      {
+        maxFeePerGas: SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
+        maxPriorityFeePerGas: SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
+      }
+    );
   });
 
   it("builds TSYS Bridgehub direct deposit requests", () => {

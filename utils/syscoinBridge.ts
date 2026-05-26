@@ -97,7 +97,7 @@ export const getSyscoinL2TransferFeeOverrides = (params: {
   const minimumMaxFeePerGas =
     params.baseFeePerGas !== null && params.baseFeePerGas !== undefined
       ? params.baseFeePerGas + maxPriorityFeePerGas
-      : 0n;
+      : maxPriorityFeePerGas;
 
   return {
     maxFeePerGas:
