@@ -8,6 +8,7 @@ import {
   SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT,
   buildSyscoinTransferTransaction,
   buildSyscoinWithdrawTransaction,
+  isSyscoinL2BaseToken,
   isSyscoinBridgeNetwork,
 } from "@/utils/syscoinBridge";
 
@@ -158,7 +159,7 @@ export default (
               account: params!.from as `0x${string}`,
               ...transaction,
             });
-            if (params!.type === "transfer") {
+            if (params!.type === "transfer" && !isSyscoinL2BaseToken(params!.tokenAddress)) {
               return estimatedGas > SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT
                 ? estimatedGas
                 : SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT;
