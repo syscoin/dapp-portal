@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import { $fetch } from "ofetch";
+import { isAddress } from "viem";
 import { L1Signer, L1VoidSigner, BrowserProvider, Signer } from "zksync-ethers";
 
 import { customBridgeTokens } from "@/data/customBridgeTokens";
@@ -128,7 +129,10 @@ export const useZkSyncWalletStore = defineStore("zkSyncWallet", () => {
   const getBalancesFromSyscoinBlockscout = async (): Promise<TokenAmount[]> => {
     await tokensStore.requestTokens();
     if (!tokens.value) throw new Error("Tokens are not available");
-    if (!account.value.address) throw new Error("Account is not available");
+    const accountAddress = account.value.address;
+    // SYSCOIN: initial wallet reconnect can run this before MetaMask has
+    // repopulated the account address; render empty balances until it does.
+    if (!accountAddress || !isAddress(accountAddress)) return [];
     if (!isSyscoinBridgeNetwork(eraNetwork.value)) throw new Error("Syscoin bridge config is not available");
 
     // SYSCOIN: L2 Blockscout lists L2-created and bridged ERC20 balances for
@@ -139,7 +143,7 @@ export const useZkSyncWalletStore = defineStore("zkSyncWallet", () => {
       ? [
           {
             ...baseToken,
-            amount: (await provider.getBalance(account.value.address)).toString(),
+            amount: (await provider.getBalance(accountAddress)).toString(),
           },
         ]
       : [];
@@ -147,7 +151,7 @@ export const useZkSyncWalletStore = defineStore("zkSyncWallet", () => {
     const registry = await fetchSyscoinTokenRegistry();
     const blockscoutBalances = await fetchSyscoinBlockscoutTokenBalances(
       eraNetwork.value.syscoinBridge.l2BlockscoutApiUrl,
-      account.value.address,
+      accountAddress,
       "L2",
       registry.l2Tokens
     );

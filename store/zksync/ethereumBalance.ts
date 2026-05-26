@@ -1,4 +1,5 @@
 import { getBalance } from "@wagmi/core";
+import { isAddress } from "viem";
 import { utils } from "zksync-ethers";
 
 import { l1Networks } from "@/data/networks";
@@ -71,7 +72,10 @@ export const useZkSyncEthereumBalanceStore = defineStore("zkSyncEthereumBalances
   const getBalancesFromSyscoinBlockscout = async (): Promise<TokenAmount[]> => {
     await tokensStore.requestTokens();
     if (!l1Tokens.value) throw new Error("Tokens are not available");
-    if (!account.value.address) throw new Error("Account is not available");
+    const accountAddress = account.value.address;
+    // SYSCOIN: initial wallet reconnect can run this before MetaMask has
+    // repopulated the account address; render empty balances until it does.
+    if (!accountAddress || !isAddress(accountAddress)) return [];
     if (!isSyscoinBridgeNetwork(selectedNetwork.value)) throw new Error("Syscoin bridge config is not available");
 
     // SYSCOIN: deposits originate on L1, so discover ERC20 wallet balances
@@ -83,7 +87,7 @@ export const useZkSyncEthereumBalanceStore = defineStore("zkSyncEthereumBalances
             ...nativeToken,
             amount: (
               await getBalance(wagmiConfig, {
-                address: account.value.address!,
+                address: accountAddress,
                 chainId: l1Network.value!.id,
               })
             ).value.toString(),
@@ -94,7 +98,7 @@ export const useZkSyncEthereumBalanceStore = defineStore("zkSyncEthereumBalances
     const registry = await fetchSyscoinTokenRegistry();
     const blockscoutBalances = await fetchSyscoinBlockscoutTokenBalances(
       selectedNetwork.value.syscoinBridge.l1BlockscoutApiUrl,
-      account.value.address,
+      accountAddress,
       "L1",
       registry.l1Tokens
     );

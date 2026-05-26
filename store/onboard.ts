@@ -9,6 +9,7 @@ import {
   watchAccount,
 } from "@wagmi/core";
 import { createWeb3Modal } from "@web3modal/wagmi";
+import { isAddress } from "viem";
 
 import { useSentryLogger } from "@/composables/useSentryLogger";
 import { wagmiConfig } from "@/data/wagmi";
@@ -168,7 +169,9 @@ export const useOnboardStore = defineStore("onboard", () => {
 
   return {
     account: computed(() => account.value),
-    isConnected: computed(() => !!account.value.address),
+    // SYSCOIN: fresh MetaMask reconnects can transiently report connected
+    // without a usable account address, which triggers bridge balance fetches.
+    isConnected: computed(() => !!account.value.address && isAddress(account.value.address)),
     isConnectingWallet: computed(() => account.value.isReconnecting), // isConnecting already has a web3modal overlay
     connectingWalletError,
     connectorName,
