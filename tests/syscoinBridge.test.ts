@@ -9,7 +9,7 @@ import {
 } from "../data/syscoin";
 import {
   SYSCOIN_DEFAULT_L1_ERC20_DEPOSIT_GAS_LIMIT,
-  SYSCOIN_DEFAULT_L2_ERC20_TRANSFER_GAS_LIMIT,
+  SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT,
   SYSCOIN_DEFAULT_L2_GAS_LIMIT,
   SYSCOIN_REQUIRED_L1_TO_L2_GAS_PER_PUBDATA_BYTE,
   buildSyscoinErc20DepositRequest,
@@ -44,8 +44,8 @@ describe("syscoin bridge encoding", () => {
     assert.equal(SYSCOIN_DEFAULT_L1_ERC20_DEPOSIT_GAS_LIMIT, 1_300_000n);
   });
 
-  it("keeps ERC20 transfer gas floor above observed Tanenbaum estimate", () => {
-    assert.equal(SYSCOIN_DEFAULT_L2_ERC20_TRANSFER_GAS_LIMIT, 65_000n);
+  it("keeps account transfer gas floor above observed Tanenbaum estimate", () => {
+    assert.equal(SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT, 65_000n);
   });
 
   it("builds TSYS Bridgehub direct deposit requests", () => {

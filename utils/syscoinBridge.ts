@@ -23,9 +23,9 @@ export const SYSCOIN_DEFAULT_L1_DEPOSIT_GAS_LIMIT = 700_000n;
 // SYSCOIN: ERC20 two-bridge deposits measured ~981k gas on Tanenbaum.
 export const SYSCOIN_DEFAULT_L1_ERC20_DEPOSIT_GAS_LIMIT = 1_300_000n;
 export const SYSCOIN_DEFAULT_L1_APPROVAL_GAS_LIMIT = 90_000n;
-// SYSCOIN: Tanenbaum ERC20 transfers can revert when the RPC estimates around
-// 40k gas. Pali succeeds with 65k, so keep that as a floor for token sends.
-export const SYSCOIN_DEFAULT_L2_ERC20_TRANSFER_GAS_LIMIT = 65_000n;
+// SYSCOIN: Tanenbaum account transfers can revert when the RPC estimates
+// around 40k gas. Pali succeeds with ~65k, so keep that as a transfer floor.
+export const SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT = 65_000n;
 // SYSCOIN: Tanenbaum L1 has ~150s blocks, so viem's 180s receipt
 // timeout is too close to the normal block interval for wallet UX.
 export const SYSCOIN_L1_RECEIPT_TIMEOUT = 15 * 60_000;
