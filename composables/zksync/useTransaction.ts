@@ -119,8 +119,10 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
           chainId: selectedNetwork.value.id,
           ...syscoinTx,
           account: accountAddress as `0x${string}`,
-          gasPrice: BigInt(fee.gasPrice.toString()),
           gas: BigInt(fee.gasLimit.toString()),
+          // SYSCOIN: for account transfers, the wallet's network-suggested EIP-1559
+          // fees are more reliable than a legacy site-suggested gasPrice.
+          ...(transaction.type === "transfer" ? {} : { gasPrice: BigInt(fee.gasPrice.toString()) }),
         });
 
         const txResponse = { hash };

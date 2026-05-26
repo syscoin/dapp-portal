@@ -73,7 +73,7 @@ export const useZkSyncEthereumBalanceStore = defineStore("zkSyncEthereumBalances
     await tokensStore.requestTokens();
     if (!l1Tokens.value) throw new Error("Tokens are not available");
     const accountAddress = account.value.address;
-    // SYSCOIN: initial wallet reconnect can run this before MetaMask has
+    // SYSCOIN: initial wallet reconnect can run this before the wallet has
     // repopulated the account address; render empty balances until it does.
     if (!accountAddress || !isAddress(accountAddress)) return [];
     if (!isSyscoinBridgeNetwork(selectedNetwork.value)) throw new Error("Syscoin bridge config is not available");
