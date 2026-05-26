@@ -29,7 +29,6 @@ export const SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT = 65_000n;
 // SYSCOIN: zkSYS RPC currently returns 0 for priority fee suggestions, while
 // MetaMask can incorrectly set the whole max fee as the priority fee.
 export const SYSCOIN_DEFAULT_L2_PRIORITY_FEE = 5_000_000_000n;
-export const SYSCOIN_DEFAULT_L2_MAX_FEE_FALLBACK = 1_000_000_000_000n;
 // SYSCOIN: Tanenbaum L1 has ~150s blocks, so viem's 180s receipt
 // timeout is too close to the normal block interval for wallet UX.
 export const SYSCOIN_L1_RECEIPT_TIMEOUT = 15 * 60_000;
@@ -95,14 +94,15 @@ export const getSyscoinL2TransferFeeOverrides = (params: {
   suggestedMaxFeePerGas: bigint;
 }) => {
   const maxPriorityFeePerGas = SYSCOIN_DEFAULT_L2_PRIORITY_FEE;
+  const sequencerMaxFeePerGas =
+    params.suggestedMaxFeePerGas > maxPriorityFeePerGas ? params.suggestedMaxFeePerGas : maxPriorityFeePerGas;
   const minimumMaxFeePerGas =
     params.baseFeePerGas !== null && params.baseFeePerGas !== undefined
       ? params.baseFeePerGas + maxPriorityFeePerGas
-      : SYSCOIN_DEFAULT_L2_MAX_FEE_FALLBACK;
+      : sequencerMaxFeePerGas;
 
   return {
-    maxFeePerGas:
-      params.suggestedMaxFeePerGas > minimumMaxFeePerGas ? params.suggestedMaxFeePerGas : minimumMaxFeePerGas,
+    maxFeePerGas: sequencerMaxFeePerGas > minimumMaxFeePerGas ? sequencerMaxFeePerGas : minimumMaxFeePerGas,
     maxPriorityFeePerGas,
   };
 };

@@ -9,7 +9,6 @@ import {
 } from "../data/syscoin";
 import {
   SYSCOIN_DEFAULT_L1_ERC20_DEPOSIT_GAS_LIMIT,
-  SYSCOIN_DEFAULT_L2_MAX_FEE_FALLBACK,
   SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
   SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT,
   SYSCOIN_DEFAULT_L2_GAS_LIMIT,
@@ -85,10 +84,20 @@ describe("syscoin bridge encoding", () => {
     assert.deepEqual(
       getSyscoinL2TransferFeeOverrides({
         baseFeePerGas: undefined,
+        suggestedMaxFeePerGas: 562_500_000_000n,
+      }),
+      {
+        maxFeePerGas: 562_500_000_000n,
+        maxPriorityFeePerGas: SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
+      }
+    );
+    assert.deepEqual(
+      getSyscoinL2TransferFeeOverrides({
+        baseFeePerGas: undefined,
         suggestedMaxFeePerGas: 1_000_000_000n,
       }),
       {
-        maxFeePerGas: SYSCOIN_DEFAULT_L2_MAX_FEE_FALLBACK,
+        maxFeePerGas: SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
         maxPriorityFeePerGas: SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
       }
     );
