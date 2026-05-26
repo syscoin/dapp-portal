@@ -1,5 +1,5 @@
 import { $fetch } from "ofetch";
-import { getAddress, isAddressEqual, zeroAddress } from "viem";
+import { getAddress, isAddress, isAddressEqual, zeroAddress } from "viem";
 
 import { L2_ASSET_ROUTER_ADDRESS } from "./constants";
 import { SYSCOIN_L2_ASSET_ROUTER_ABI } from "./syscoinBridge";
@@ -134,9 +134,13 @@ export const fetchSyscoinBlockscoutTokenBalances = async (
   side: SyscoinTokenSide,
   officialTokens: Token[] = []
 ) => {
+  // SYSCOIN: wallet hydration can briefly expose an undefined address while
+  // balance views are mounting; never turn that into a Blockscout request.
+  if (!isAddress(accountAddress)) return [];
+
   const balances = await fetchBlockscoutCollection<BlockscoutTokenBalance>(
     apiUrl,
-    `/addresses/${accountAddress}/tokens?type=ERC-20`
+    `/addresses/${getAddress(accountAddress)}/tokens?type=ERC-20`
   );
   return balances.map((balance) => mapSyscoinBlockscoutTokenBalance(balance, side, officialTokens));
 };

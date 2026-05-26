@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 
 import { getAddress } from "viem";
-import { describe, it } from "vitest";
+import { $fetch } from "ofetch";
+import { beforeEach, describe, it, vi } from "vitest";
 
 import { customBridgeTokens } from "../data/customBridgeTokens";
 import {
   attachSyscoinL1MappingsToL2Tokens,
+  fetchSyscoinBlockscoutTokenBalances,
   mapSyscoinBlockscoutToken,
   mapSyscoinBlockscoutTokenBalance,
   mergeSyscoinTokens,
@@ -13,8 +15,13 @@ import {
 } from "../utils/syscoinBlockscout";
 import { AddressChainType, getBalancesWithCustomBridgeTokens, getTokensWithCustomBridgeTokens } from "../utils/helpers";
 
+vi.mock("ofetch", () => ({
+  $fetch: vi.fn(async () => ({ items: [], next_page_params: null })),
+}));
+
 const l1Dai = "0x2d2e508c8056c3D92745dC2C39E5Cc316de79C0F";
 const l2Dai = "0x4444444444444444444444444444444444444444";
+const fetchMock = vi.mocked($fetch);
 
 const officialTokens = [
   {
@@ -28,6 +35,10 @@ const officialTokens = [
 ];
 
 describe("syscoin Blockscout mapping", () => {
+  beforeEach(() => {
+    fetchMock.mockClear();
+  });
+
   it("keeps custom bridge token addresses valid for viem", () => {
     for (const token of customBridgeTokens) {
       assert.doesNotThrow(() => getAddress(token.l1Address));
@@ -91,6 +102,13 @@ describe("syscoin Blockscout mapping", () => {
     assert.equal(balance.address, l1Dai);
     assert.equal(balance.amount, "123");
     assert.equal(balance.l2Address, l2Dai);
+  });
+
+  it("does not request Blockscout balances without a valid account address", async () => {
+    const balances = await fetchSyscoinBlockscoutTokenBalances("https://explorer.tanenbaum.io/api/v2", "undefined", "L1");
+
+    assert.deepEqual(balances, []);
+    assert.equal(fetchMock.mock.calls.length, 0);
   });
 
   it("keeps curated tokens before explorer tokens when merging", () => {
