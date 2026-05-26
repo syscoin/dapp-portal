@@ -7,7 +7,11 @@ import { EIP712_TX_TYPE } from "zksync-ethers/build/utils";
 
 import { isCustomNode } from "@/data/networks";
 import { L2_BASE_TOKEN_ADDRESS } from "@/utils/constants";
-import { buildSyscoinWithdrawTransaction, isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
+import {
+  buildSyscoinTransferTransaction,
+  buildSyscoinWithdrawTransaction,
+  isSyscoinBridgeNetwork,
+} from "@/utils/syscoinBridge";
 import { wagmiConfig } from "~/data/wagmi";
 
 import { useSentryLogger } from "../useSentryLogger";
@@ -94,18 +98,26 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
 
       status.value = "waiting-for-signature";
 
-      // SYSCOIN: route withdrawals through OS system contracts directly.
-      // Base token withdrawal sends TSYS as msg.value to 0x800a; ERC20 withdrawal
-      // calls the L2 AssetRouter. Finalization remains an L1 nullifier call.
-      if (transaction.type === "withdrawal" && isSyscoinBridgeNetwork(selectedNetwork.value)) {
-        const syscoinWithdrawTx = buildSyscoinWithdrawTransaction({
-          l1Receiver: transaction.to as `0x${string}`,
-          l2Token: transaction.tokenAddress as `0x${string}`,
-          amount: BigInt(transaction.amount.toString()),
-        });
+      if (isSyscoinBridgeNetwork(selectedNetwork.value)) {
+        // SYSCOIN: zkSYS uses standard EVM transactions. Avoid ZKsync SDK
+        // EIP-712 tx type 0x71 and zks_gasPerPubdata for account transfers.
+        // Withdrawals still call OS system contracts directly and are claimed
+        // later through the L1 nullifier.
+        const syscoinTx =
+          transaction.type === "transfer"
+            ? buildSyscoinTransferTransaction({
+                recipient: transaction.to as `0x${string}`,
+                l2Token: transaction.tokenAddress as `0x${string}`,
+                amount: BigInt(transaction.amount.toString()),
+              })
+            : buildSyscoinWithdrawTransaction({
+                l1Receiver: transaction.to as `0x${string}`,
+                l2Token: transaction.tokenAddress as `0x${string}`,
+                amount: BigInt(transaction.amount.toString()),
+              });
         const hash = await sendTransaction(wagmiConfig, {
           chainId: selectedNetwork.value.id,
-          ...syscoinWithdrawTx,
+          ...syscoinTx,
           account: accountAddress as `0x${string}`,
           gasPrice: BigInt(fee.gasPrice.toString()),
           gas: BigInt(fee.gasLimit.toString()),

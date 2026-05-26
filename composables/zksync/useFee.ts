@@ -4,7 +4,11 @@ import { encodeFunctionData } from "viem";
 import { EIP712_TX_TYPE } from "zksync-ethers/build/utils";
 
 import { wagmiConfig } from "@/data/wagmi";
-import { buildSyscoinWithdrawTransaction, isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
+import {
+  buildSyscoinTransferTransaction,
+  buildSyscoinWithdrawTransaction,
+  isSyscoinBridgeNetwork,
+} from "@/utils/syscoinBridge";
 
 import type { Token, TokenAmount } from "@/types";
 import type { BigNumberish, ethers } from "ethers";
@@ -133,17 +137,25 @@ export default (
         retry(() => provider.getGasPrice()),
         retry(() => {
           const isCustomBridgeToken = !!token?.l2BridgeAddress;
-          if (params!.type === "withdrawal" && isSyscoinBridgeNetwork(selectedNetwork.value)) {
-            // SYSCOIN: estimate the exact transaction shape submitted in
-            // useTransaction.ts, not the SDK bridge-helper calldata.
+          if (isSyscoinBridgeNetwork(selectedNetwork.value)) {
+            // SYSCOIN: estimate the exact standard-EVM transaction shape
+            // submitted in useTransaction.ts, avoiding ZKsync SDK EIP-712 RPCs.
+            const transaction =
+              params!.type === "transfer"
+                ? buildSyscoinTransferTransaction({
+                    recipient: params!.to as `0x${string}`,
+                    l2Token: params!.tokenAddress as `0x${string}`,
+                    amount: BigInt(params!.amount),
+                  })
+                : buildSyscoinWithdrawTransaction({
+                    l1Receiver: params!.to as `0x${string}`,
+                    l2Token: params!.tokenAddress as `0x${string}`,
+                    amount: BigInt(params!.amount),
+                  });
             return estimateGas(wagmiConfig, {
               chainId: selectedNetwork.value.id,
               account: params!.from as `0x${string}`,
-              ...buildSyscoinWithdrawTransaction({
-                l1Receiver: params!.to as `0x${string}`,
-                l2Token: params!.tokenAddress as `0x${string}`,
-                amount: BigInt(params!.amount),
-              }),
+              ...transaction,
             });
           } else if (isCustomBridgeToken) {
             return getCustomGasLimit({

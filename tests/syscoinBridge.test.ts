@@ -13,9 +13,11 @@ import {
   SYSCOIN_REQUIRED_L1_TO_L2_GAS_PER_PUBDATA_BYTE,
   buildSyscoinErc20DepositRequest,
   buildSyscoinErc20SecondBridgeCalldata,
+  buildSyscoinErc20TransferData,
   buildSyscoinErc20WithdrawData,
   buildSyscoinL2BaseTokenWithdrawData,
   buildSyscoinTsysDepositRequest,
+  buildSyscoinTransferTransaction,
   buildSyscoinWithdrawTransaction,
   encodeSyscoinErc20Deposit,
   encodeSyscoinTsysDeposit,
@@ -90,6 +92,31 @@ describe("syscoin bridge encoding", () => {
       buildSyscoinErc20WithdrawData(receiver, l2Token, amount).slice(0, 10),
       toFunctionSelector("withdraw(address,address,uint256)")
     );
+  });
+
+  it("builds standard EVM transfers for TSYS and ERC20", () => {
+    assert.equal(
+      buildSyscoinErc20TransferData(receiver, amount).slice(0, 10),
+      toFunctionSelector("transfer(address,uint256)")
+    );
+
+    const baseTokenTx = buildSyscoinTransferTransaction({
+      recipient: receiver,
+      l2Token: "0x000000000000000000000000000000000000800A",
+      amount,
+    });
+    assert.equal(baseTokenTx.to, receiver);
+    assert.equal(baseTokenTx.value, amount);
+    assert.equal(baseTokenTx.data, undefined);
+
+    const erc20Tx = buildSyscoinTransferTransaction({
+      recipient: receiver,
+      l2Token,
+      amount,
+    });
+    assert.equal(erc20Tx.to, l2Token);
+    assert.equal(erc20Tx.value, 0n);
+    assert.equal(erc20Tx.data?.slice(0, 10), toFunctionSelector("transfer(address,uint256)"));
   });
 
   it("builds matching Syscoin withdrawal transaction requests", () => {

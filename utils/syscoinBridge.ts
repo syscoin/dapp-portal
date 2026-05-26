@@ -43,6 +43,7 @@ export const SYSCOIN_L2_ASSET_ROUTER_ABI = parseAbi([
 export const SYSCOIN_ERC20_ABI = parseAbi([
   "function allowance(address owner, address spender) view returns (uint256)",
   "function approve(address spender, uint256 amount) returns (bool)",
+  "function transfer(address recipient, uint256 amount) returns (bool)",
 ]);
 
 export const SYSCOIN_L1_NULLIFIER_ABI = parseAbi([
@@ -92,6 +93,24 @@ export const buildSyscoinErc20WithdrawData = (l1Receiver: Address, l2Token: Addr
     functionName: "withdraw",
     args: [l1Receiver, l2Token, amount],
   });
+};
+
+export const buildSyscoinErc20TransferData = (recipient: Address, amount: bigint) => {
+  return encodeFunctionData({
+    abi: SYSCOIN_ERC20_ABI,
+    functionName: "transfer",
+    args: [recipient, amount],
+  });
+};
+
+export const buildSyscoinTransferTransaction = (params: { recipient: Address; l2Token: Address; amount: bigint }) => {
+  const isBaseToken = isAddressEqual(getAddress(params.l2Token), getAddress(L2_BASE_TOKEN_ADDRESS));
+
+  return {
+    to: (isBaseToken ? params.recipient : params.l2Token) as Address,
+    data: isBaseToken ? undefined : buildSyscoinErc20TransferData(params.recipient, params.amount),
+    value: isBaseToken ? params.amount : 0n,
+  };
 };
 
 export const buildSyscoinWithdrawTransaction = (params: { l1Receiver: Address; l2Token: Address; amount: bigint }) => {
