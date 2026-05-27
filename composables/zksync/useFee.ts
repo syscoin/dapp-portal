@@ -8,7 +8,7 @@ import {
   SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT,
   buildSyscoinTransferTransaction,
   buildSyscoinWithdrawTransaction,
-  getSyscoinL2TransferFeeOverrides,
+  getSyscoinL2FeeOverrides,
   isSyscoinL2BaseToken,
   isSyscoinBridgeNetwork,
 } from "@/utils/syscoinBridge";
@@ -212,10 +212,10 @@ export default (
         }),
       ]);
 
-      if (isSyscoinBridgeNetwork(selectedNetwork.value) && params.type === "transfer") {
+      if (isSyscoinBridgeNetwork(selectedNetwork.value)) {
         const publicClient = getPublicClient(wagmiConfig, { chainId: selectedNetwork.value.id });
         const latestBlock = await publicClient?.getBlock().catch(() => undefined);
-        gasPrice.value = getSyscoinL2TransferFeeOverrides({
+        gasPrice.value = getSyscoinL2FeeOverrides({
           baseFeePerGas: latestBlock?.baseFeePerGas,
           suggestedMaxFeePerGas: BigInt(price.toString()),
         }).maxFeePerGas;

@@ -10,7 +10,7 @@ import { L2_BASE_TOKEN_ADDRESS } from "@/utils/constants";
 import {
   buildSyscoinTransferTransaction,
   buildSyscoinWithdrawTransaction,
-  getSyscoinL2TransferFeeOverrides,
+  getSyscoinL2FeeOverrides,
   isSyscoinBridgeNetwork,
 } from "@/utils/syscoinBridge";
 import { wagmiConfig } from "~/data/wagmi";
@@ -116,18 +116,15 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
                 l2Token: transaction.tokenAddress as `0x${string}`,
                 amount: BigInt(transaction.amount.toString()),
               });
-        const syscoinFeeOverrides =
-          transaction.type === "transfer"
-            ? getSyscoinL2TransferFeeOverrides({
-                suggestedMaxFeePerGas: BigInt(fee.gasPrice.toString()),
-              })
-            : { gasPrice: BigInt(fee.gasPrice.toString()) };
+        const syscoinFeeOverrides = getSyscoinL2FeeOverrides({
+          suggestedMaxFeePerGas: BigInt(fee.gasPrice.toString()),
+        });
         const hash = await sendTransaction(wagmiConfig, {
           chainId: selectedNetwork.value.id,
           ...syscoinTx,
           account: accountAddress as `0x${string}`,
           gas: BigInt(fee.gasLimit.toString()),
-          // SYSCOIN: set EIP-1559 caps for account transfers so wallets do not
+          // SYSCOIN: set EIP-1559 caps for L2 txs so wallets do not
           // turn the full max fee into an excessive priority tip.
           ...syscoinFeeOverrides,
         });
