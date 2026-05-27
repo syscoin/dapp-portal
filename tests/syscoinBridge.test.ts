@@ -24,7 +24,7 @@ import {
   encodeSyscoinErc20Deposit,
   encodeSyscoinTsysDeposit,
   getSyscoinFinalizeWithdrawalParams,
-  getSyscoinL2TransferFeeOverrides,
+  getSyscoinL2FeeOverrides,
 } from "../utils/syscoinBridge";
 
 const chainId = 57_057n;
@@ -50,9 +50,9 @@ describe("syscoin bridge encoding", () => {
     assert.equal(SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT, 65_000n);
   });
 
-  it("caps Syscoin transfer priority fee below the max fee", () => {
+  it("caps Syscoin L2 priority fee below the max fee", () => {
     assert.deepEqual(
-      getSyscoinL2TransferFeeOverrides({
+      getSyscoinL2FeeOverrides({
         baseFeePerGas: 375_000_000_000n,
         suggestedMaxFeePerGas: 562_500_000_000n,
       }),
@@ -62,7 +62,7 @@ describe("syscoin bridge encoding", () => {
       }
     );
     assert.deepEqual(
-      getSyscoinL2TransferFeeOverrides({
+      getSyscoinL2FeeOverrides({
         baseFeePerGas: 375_000_000_000n,
         suggestedMaxFeePerGas: 376_000_000_000n,
       }),
@@ -72,7 +72,7 @@ describe("syscoin bridge encoding", () => {
       }
     );
     assert.deepEqual(
-      getSyscoinL2TransferFeeOverrides({
+      getSyscoinL2FeeOverrides({
         baseFeePerGas: 0n,
         suggestedMaxFeePerGas: 1_000_000_000n,
       }),
@@ -82,7 +82,7 @@ describe("syscoin bridge encoding", () => {
       }
     );
     assert.deepEqual(
-      getSyscoinL2TransferFeeOverrides({
+      getSyscoinL2FeeOverrides({
         baseFeePerGas: undefined,
         suggestedMaxFeePerGas: 562_500_000_000n,
       }),
@@ -92,7 +92,7 @@ describe("syscoin bridge encoding", () => {
       }
     );
     assert.deepEqual(
-      getSyscoinL2TransferFeeOverrides({
+      getSyscoinL2FeeOverrides({
         baseFeePerGas: undefined,
         suggestedMaxFeePerGas: 1_000_000_000n,
       }),

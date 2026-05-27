@@ -89,10 +89,7 @@ export const isSyscoinL2BaseToken = (tokenAddress: string) => {
   return isAddressEqual(getAddress(tokenAddress), getAddress(L2_BASE_TOKEN_ADDRESS));
 };
 
-export const getSyscoinL2TransferFeeOverrides = (params: {
-  baseFeePerGas?: bigint | null;
-  suggestedMaxFeePerGas: bigint;
-}) => {
+export const getSyscoinL2FeeOverrides = (params: { baseFeePerGas?: bigint | null; suggestedMaxFeePerGas: bigint }) => {
   const maxPriorityFeePerGas = SYSCOIN_DEFAULT_L2_PRIORITY_FEE;
   const sequencerMaxFeePerGas =
     params.suggestedMaxFeePerGas > maxPriorityFeePerGas ? params.suggestedMaxFeePerGas : maxPriorityFeePerGas;
