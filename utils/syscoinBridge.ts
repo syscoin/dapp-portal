@@ -1,5 +1,7 @@
 import {
+  decodeAbiParameters,
   decodeEventLog,
+  decodeFunctionData,
   encodeAbiParameters,
   encodeFunctionData,
   getAddress,
@@ -61,6 +63,9 @@ export const SYSCOIN_L1_MESSENGER_ADDRESS = "0x000000000000000000000000000000000
 export const SYSCOIN_L1_MESSAGE_SENT_ABI = parseAbi([
   "event L1MessageSent(address indexed sender, bytes32 indexed hash, bytes message)",
 ]);
+export const SYSCOIN_BASE_TOKEN_WITHDRAWAL_MESSAGE_ABI = parseAbi([
+  "function finalizeEthWithdrawal(address l1Receiver, uint256 amount)",
+]);
 
 export type SyscoinBridgeNetwork = ZkSyncNetwork & Required<Pick<ZkSyncNetwork, "syscoinBridge">>;
 export type SyscoinFinalizeWithdrawalParams = {
@@ -71,6 +76,15 @@ export type SyscoinFinalizeWithdrawalParams = {
   l2TxNumberInBatch: number;
   message: Hex;
   merkleProof: readonly Hex[];
+};
+export type SyscoinAssetRouterWithdrawalMessage = {
+  originChainId: bigint;
+  assetId: Hex;
+  originalCaller: Address;
+  l1Receiver: Address;
+  l1Token: Address;
+  amount: bigint;
+  erc20Metadata: Hex;
 };
 
 type SyscoinRpcProvider = {
@@ -195,6 +209,44 @@ export const getSyscoinFinalizeWithdrawalParams = async (
     l2TxNumberInBatch: Number(BigInt(receipt.transactionIndex)),
     message: l1MessageSentLog.args.message as Hex,
     merkleProof: proof.proof as readonly Hex[],
+  };
+};
+
+export const parseSyscoinBaseTokenWithdrawalMessage = (message: Hex) => {
+  const decoded = decodeFunctionData({
+    abi: SYSCOIN_BASE_TOKEN_WITHDRAWAL_MESSAGE_ABI,
+    data: message,
+  });
+  if (decoded.functionName !== "finalizeEthWithdrawal") {
+    throw new Error(`Unexpected base token withdrawal message: ${decoded.functionName}`);
+  }
+  const [l1Receiver, amount] = decoded.args;
+  return { l1Receiver: getAddress(l1Receiver), amount };
+};
+
+export const parseSyscoinAssetRouterWithdrawalMessage = (message: Hex): SyscoinAssetRouterWithdrawalMessage => {
+  const selector = "0x6c0960f9";
+  if (!message.toLowerCase().startsWith(selector)) {
+    throw new Error("Unexpected asset router withdrawal message selector");
+  }
+
+  const encoded = message.slice(2);
+  const originChainId = BigInt(`0x${encoded.slice(8, 72)}`);
+  const assetId = `0x${encoded.slice(72, 136)}` as Hex;
+  const transferData = `0x${encoded.slice(136)}` as Hex;
+  const [originalCaller, l1Receiver, l1Token, amount, erc20Metadata] = decodeAbiParameters(
+    [{ type: "address" }, { type: "address" }, { type: "address" }, { type: "uint256" }, { type: "bytes" }],
+    transferData
+  );
+
+  return {
+    originChainId,
+    assetId,
+    originalCaller: getAddress(originalCaller),
+    l1Receiver: getAddress(l1Receiver),
+    l1Token: getAddress(l1Token),
+    amount,
+    erc20Metadata,
   };
 };
 
