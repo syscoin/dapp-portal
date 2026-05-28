@@ -1,7 +1,6 @@
 import {
   decodeAbiParameters,
   decodeEventLog,
-  decodeFunctionData,
   encodeAbiParameters,
   encodeFunctionData,
   getAddress,
@@ -62,9 +61,6 @@ export const SYSCOIN_L1_NULLIFIER_ABI = parseAbi([
 export const SYSCOIN_L1_MESSENGER_ADDRESS = "0x0000000000000000000000000000000000008008";
 export const SYSCOIN_L1_MESSAGE_SENT_ABI = parseAbi([
   "event L1MessageSent(address indexed sender, bytes32 indexed hash, bytes message)",
-]);
-export const SYSCOIN_BASE_TOKEN_WITHDRAWAL_MESSAGE_ABI = parseAbi([
-  "function finalizeEthWithdrawal(address l1Receiver, uint256 amount)",
 ]);
 
 export type SyscoinBridgeNetwork = ZkSyncNetwork & Required<Pick<ZkSyncNetwork, "syscoinBridge">>;
@@ -213,14 +209,15 @@ export const getSyscoinFinalizeWithdrawalParams = async (
 };
 
 export const parseSyscoinBaseTokenWithdrawalMessage = (message: Hex) => {
-  const decoded = decodeFunctionData({
-    abi: SYSCOIN_BASE_TOKEN_WITHDRAWAL_MESSAGE_ABI,
-    data: message,
-  });
-  if (decoded.functionName !== "finalizeEthWithdrawal") {
-    throw new Error(`Unexpected base token withdrawal message: ${decoded.functionName}`);
+  const selector = "0x6c0960f9";
+  const packedLength = selector.length + 40 + 64;
+  if (!message.toLowerCase().startsWith(selector) || message.length !== packedLength) {
+    throw new Error("Unexpected base token withdrawal message");
   }
-  const [l1Receiver, amount] = decoded.args;
+
+  const encoded = message.slice(2);
+  const l1Receiver = `0x${encoded.slice(8, 48)}` as Address;
+  const amount = BigInt(`0x${encoded.slice(48, 112)}`);
   return { l1Receiver: getAddress(l1Receiver), amount };
 };
 

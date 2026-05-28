@@ -26,6 +26,7 @@ import {
   getSyscoinFinalizeWithdrawalParams,
   getSyscoinL2FeeOverrides,
   parseSyscoinAssetRouterWithdrawalMessage,
+  parseSyscoinBaseTokenWithdrawalMessage,
 } from "../utils/syscoinBridge";
 
 const chainId = 57_057n;
@@ -255,6 +256,15 @@ describe("syscoin bridge encoding", () => {
     assert.equal(params.l2TxNumberInBatch, 3);
     assert.equal(params.message, message);
     assert.deepEqual(params.merkleProof, proof);
+  });
+
+  it("parses packed base-token withdrawal messages", () => {
+    const message = `0x6c0960f9${receiver.slice(2)}${amount.toString(16).padStart(64, "0")}` as `0x${string}`;
+
+    const parsed = parseSyscoinBaseTokenWithdrawalMessage(message);
+
+    assert.equal(parsed.l1Receiver, receiver);
+    assert.equal(parsed.amount, amount);
   });
 
   it("parses asset-router withdrawal messages", () => {

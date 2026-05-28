@@ -24,11 +24,17 @@ type SyscoinBlockscoutTransaction = {
   from?: { hash: Address } | null;
   to?: { hash: Address } | null;
 };
+type SyscoinBlockscoutTransactionsResponse = {
+  items: SyscoinBlockscoutTransaction[];
+  next_page_params?: Record<string, string | number | boolean | null> | null;
+};
 type SyscoinBlockscoutTransactionsCache = {
   key: string;
   fetchedAt: number;
   items: SyscoinBlockscoutTransaction[];
 };
+
+const SYSCOIN_BLOCKSCOUT_WITHDRAWAL_FETCH_MAX_PAGES = 20;
 
 export const useZkSyncWithdrawalsStore = defineStore("zkSyncWithdrawals", () => {
   const onboardStore = useOnboardStore();
@@ -40,7 +46,7 @@ export const useZkSyncWithdrawalsStore = defineStore("zkSyncWithdrawals", () => 
   const { destinations } = storeToRefs(useDestinationsStore());
   let syscoinBlockscoutTransactionsCache: SyscoinBlockscoutTransactionsCache | undefined;
 
-  const fetchSyscoinBlockscoutTransactions = async (url: URL, cacheKey: string) => {
+  const fetchSyscoinBlockscoutTransactions = async (baseUrl: URL, cacheKey: string) => {
     const now = Date.now();
     if (
       syscoinBlockscoutTransactionsCache?.key === cacheKey &&
@@ -49,13 +55,32 @@ export const useZkSyncWithdrawalsStore = defineStore("zkSyncWithdrawals", () => 
       return syscoinBlockscoutTransactionsCache.items;
     }
 
-    const response: { items: SyscoinBlockscoutTransaction[] } = await $fetch(url.toString());
+    const items: SyscoinBlockscoutTransaction[] = [];
+    let nextPageParams: SyscoinBlockscoutTransactionsResponse["next_page_params"] = {};
+    const seenPageCursors = new Set<string>();
+    for (let page = 0; page < SYSCOIN_BLOCKSCOUT_WITHDRAWAL_FETCH_MAX_PAGES && nextPageParams !== null; page++) {
+      const url = new URL(baseUrl.toString());
+      for (const [key, value] of Object.entries(nextPageParams ?? {})) {
+        url.searchParams.set(key, value == null ? "" : String(value));
+      }
+
+      const cursor = url.searchParams.toString();
+      if (seenPageCursors.has(cursor)) break;
+      seenPageCursors.add(cursor);
+
+      const response: SyscoinBlockscoutTransactionsResponse = await $fetch(url.toString());
+      items.push(...response.items);
+      const oldestTx = response.items[response.items.length - 1];
+      if (oldestTx && new Date(oldestTx.timestamp).getTime() < Date.now() - FETCH_TIME_LIMIT) break;
+      nextPageParams = response.next_page_params ?? null;
+    }
+
     syscoinBlockscoutTransactionsCache = {
       key: cacheKey,
       fetchedAt: now,
-      items: response.items,
+      items,
     };
-    return response.items;
+    return items;
   };
 
   const findSyscoinWithdrawalToken = (l1Token: Address): Omit<TokenAmount, "amount"> | undefined => {
