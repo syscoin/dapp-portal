@@ -1,4 +1,5 @@
 import {
+  decodeAbiParameters,
   decodeEventLog,
   encodeAbiParameters,
   encodeFunctionData,
@@ -71,6 +72,15 @@ export type SyscoinFinalizeWithdrawalParams = {
   l2TxNumberInBatch: number;
   message: Hex;
   merkleProof: readonly Hex[];
+};
+export type SyscoinAssetRouterWithdrawalMessage = {
+  originChainId: bigint;
+  assetId: Hex;
+  originalCaller: Address;
+  l1Receiver: Address;
+  l1Token: Address;
+  amount: bigint;
+  erc20Metadata: Hex;
 };
 
 type SyscoinRpcProvider = {
@@ -195,6 +205,45 @@ export const getSyscoinFinalizeWithdrawalParams = async (
     l2TxNumberInBatch: Number(BigInt(receipt.transactionIndex)),
     message: l1MessageSentLog.args.message as Hex,
     merkleProof: proof.proof as readonly Hex[],
+  };
+};
+
+export const parseSyscoinBaseTokenWithdrawalMessage = (message: Hex) => {
+  const selector = "0x6c0960f9";
+  const packedLength = selector.length + 40 + 64;
+  if (!message.toLowerCase().startsWith(selector) || message.length !== packedLength) {
+    throw new Error("Unexpected base token withdrawal message");
+  }
+
+  const encoded = message.slice(2);
+  const l1Receiver = `0x${encoded.slice(8, 48)}` as Address;
+  const amount = BigInt(`0x${encoded.slice(48, 112)}`);
+  return { l1Receiver: getAddress(l1Receiver), amount };
+};
+
+export const parseSyscoinAssetRouterWithdrawalMessage = (message: Hex): SyscoinAssetRouterWithdrawalMessage => {
+  const selector = "0x6c0960f9";
+  if (!message.toLowerCase().startsWith(selector)) {
+    throw new Error("Unexpected asset router withdrawal message selector");
+  }
+
+  const encoded = message.slice(2);
+  const originChainId = BigInt(`0x${encoded.slice(8, 72)}`);
+  const assetId = `0x${encoded.slice(72, 136)}` as Hex;
+  const transferData = `0x${encoded.slice(136)}` as Hex;
+  const [originalCaller, l1Receiver, l1Token, amount, erc20Metadata] = decodeAbiParameters(
+    [{ type: "address" }, { type: "address" }, { type: "address" }, { type: "uint256" }, { type: "bytes" }],
+    transferData
+  );
+
+  return {
+    originChainId,
+    assetId,
+    originalCaller: getAddress(originalCaller),
+    l1Receiver: getAddress(l1Receiver),
+    l1Token: getAddress(l1Token),
+    amount,
+    erc20Metadata,
   };
 };
 

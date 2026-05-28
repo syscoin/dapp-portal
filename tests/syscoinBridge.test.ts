@@ -25,6 +25,8 @@ import {
   encodeSyscoinTsysDeposit,
   getSyscoinFinalizeWithdrawalParams,
   getSyscoinL2FeeOverrides,
+  parseSyscoinAssetRouterWithdrawalMessage,
+  parseSyscoinBaseTokenWithdrawalMessage,
 } from "../utils/syscoinBridge";
 
 const chainId = 57_057n;
@@ -254,5 +256,38 @@ describe("syscoin bridge encoding", () => {
     assert.equal(params.l2TxNumberInBatch, 3);
     assert.equal(params.message, message);
     assert.deepEqual(params.merkleProof, proof);
+  });
+
+  it("parses packed base-token withdrawal messages", () => {
+    const message = `0x6c0960f9${receiver.slice(2)}${amount.toString(16).padStart(64, "0")}` as `0x${string}`;
+
+    const parsed = parseSyscoinBaseTokenWithdrawalMessage(message);
+
+    assert.equal(parsed.l1Receiver, receiver);
+    assert.equal(parsed.amount, amount);
+  });
+
+  it("parses asset-router withdrawal messages", () => {
+    const originChainId = 5700n;
+    const assetId = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const originalCaller = "0x4444444444444444444444444444444444444444";
+    const erc20Metadata = "0x1234";
+    const transferData = encodeAbiParameters(
+      [{ type: "address" }, { type: "address" }, { type: "address" }, { type: "uint256" }, { type: "bytes" }],
+      [originalCaller, receiver, l1Token, amount, erc20Metadata]
+    );
+    const message = `0x6c0960f9${originChainId.toString(16).padStart(64, "0")}${assetId.slice(2)}${transferData.slice(
+      2
+    )}` as `0x${string}`;
+
+    const parsed = parseSyscoinAssetRouterWithdrawalMessage(message);
+
+    assert.equal(parsed.originChainId, originChainId);
+    assert.equal(parsed.assetId, assetId);
+    assert.equal(parsed.originalCaller, originalCaller);
+    assert.equal(parsed.l1Receiver, receiver);
+    assert.equal(parsed.l1Token, l1Token);
+    assert.equal(parsed.amount, amount);
+    assert.equal(parsed.erc20Metadata, erc20Metadata);
   });
 });
