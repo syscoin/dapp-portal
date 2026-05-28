@@ -3,6 +3,7 @@ import { getAddress, isAddressEqual, type Address, type Hex } from "viem";
 
 import { customBridgeTokens } from "@/data/customBridgeTokens";
 import { L2_ASSET_ROUTER_ADDRESS, L2_BASE_TOKEN_ADDRESS } from "@/utils/constants";
+import { fetchSyscoinTokenRegistry } from "@/utils/syscoinBlockscout";
 import {
   SYSCOIN_L1_NULLIFIER_ABI,
   getSyscoinFinalizeWithdrawalParams,
@@ -11,7 +12,7 @@ import {
   parseSyscoinBaseTokenWithdrawalMessage,
 } from "@/utils/syscoinBridge";
 
-import type { Api, TokenAmount } from "@/types";
+import type { Api, Token, TokenAmount } from "@/types";
 
 const FETCH_TIME_LIMIT = 31 * 24 * 60 * 60 * 1000; // 31 days
 const SYSCOIN_BLOCKSCOUT_WITHDRAWAL_FETCH_CACHE_MS = 60 * 1000;
@@ -83,7 +84,10 @@ export const useZkSyncWithdrawalsStore = defineStore("zkSyncWithdrawals", () => 
     return items;
   };
 
-  const findSyscoinWithdrawalToken = (l1Token: Address): Omit<TokenAmount, "amount"> | undefined => {
+  const findSyscoinWithdrawalToken = (
+    l1Token: Address,
+    registryTokens: Token[] = []
+  ): Omit<TokenAmount, "amount"> | undefined => {
     const network = eraNetwork.value;
     if (!isSyscoinBridgeNetwork(network)) return undefined;
 
@@ -95,19 +99,24 @@ export const useZkSyncWithdrawalsStore = defineStore("zkSyncWithdrawals", () => 
     const customToken = customBridgeTokens.find(
       (token) => token.chainId === network.l1Network?.id && isAddressEqual(getAddress(token.l1Address), l1Token)
     );
-    if (!customToken) return undefined;
+    if (customToken) {
+      return {
+        address: customToken.l2Address,
+        l1Address: customToken.l1Address,
+        l2Address: customToken.l2Address,
+        symbol: customToken.bridgedSymbol || customToken.symbol,
+        name: customToken.name,
+        decimals: customToken.decimals,
+        iconUrl: customToken.iconUrl,
+        l1BridgeAddress: customToken.l1BridgeAddress,
+        l2BridgeAddress: customToken.l2BridgeAddress,
+      };
+    }
 
-    return {
-      address: customToken.l2Address,
-      l1Address: customToken.l1Address,
-      l2Address: customToken.l2Address,
-      symbol: customToken.bridgedSymbol || customToken.symbol,
-      name: customToken.name,
-      decimals: customToken.decimals,
-      iconUrl: customToken.iconUrl,
-      l1BridgeAddress: customToken.l1BridgeAddress,
-      l2BridgeAddress: customToken.l2BridgeAddress,
-    };
+    const registryToken = registryTokens.find(
+      (token) => token.l1Address && isAddressEqual(getAddress(token.l1Address), l1Token)
+    );
+    if (registryToken) return registryToken;
   };
 
   const updateSyscoinWithdrawals = async () => {
@@ -127,6 +136,7 @@ export const useZkSyncWithdrawalsStore = defineStore("zkSyncWithdrawals", () => 
       isAddressEqual(getAddress(token.address), getAddress(L2_BASE_TOKEN_ADDRESS))
     );
     if (!baseToken) throw new Error("Syscoin base token is not configured");
+    let syscoinTokenRegistry: Awaited<ReturnType<typeof fetchSyscoinTokenRegistry>> | undefined;
 
     for (const tx of transactions) {
       if (!tx.hash || !tx.timestamp) continue;
@@ -166,7 +176,8 @@ export const useZkSyncWithdrawalsStore = defineStore("zkSyncWithdrawals", () => 
           parsedWithdrawal = parseSyscoinBaseTokenWithdrawalMessage(finalizeParams.message);
         } else {
           const assetRouterWithdrawal = parseSyscoinAssetRouterWithdrawalMessage(finalizeParams.message);
-          token = findSyscoinWithdrawalToken(assetRouterWithdrawal.l1Token);
+          syscoinTokenRegistry ??= await fetchSyscoinTokenRegistry().catch(() => undefined);
+          token = findSyscoinWithdrawalToken(assetRouterWithdrawal.l1Token, syscoinTokenRegistry?.l2Tokens ?? []);
           if (!token) continue;
           parsedWithdrawal = {
             l1Receiver: assetRouterWithdrawal.l1Receiver,
