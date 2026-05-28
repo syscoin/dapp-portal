@@ -202,6 +202,7 @@ export const useZkSyncWithdrawalsStore = defineStore("zkSyncWithdrawals", () => 
           destination: destinations.value.ethereum,
         },
         info: {
+          ...transactionFromStorage?.info,
           expectedCompleteTimestamp: new Date(new Date(tx.timestamp).getTime() + WITHDRAWAL_DELAY).toISOString(),
           completed: isFinalized,
           withdrawalFinalizationAvailable: !isFinalized,
