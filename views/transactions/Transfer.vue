@@ -379,6 +379,8 @@ const isOfficialSyscoinL2Token = (token: Token | TokenAmount) => {
 const isConfiguredWithdrawableToken = (token: Token | TokenAmount) => {
   return !!token.l1Address || isOfficialSyscoinL2Token(token);
 };
+// SYSCOIN: v31 can withdraw positive-balance L2 tokens via NativeTokenVault
+// asset ids even before they have curated L1 metadata in the registry.
 const isPositiveBalance = (token: TokenAmount) => {
   try {
     return BigInt(token.amount) > 0n;
@@ -604,6 +606,8 @@ const setTokenAllowance = async () => {
   await fetchBalances(true);
 };
 
+// SYSCOIN: asset-id routing is separate from NativeTokenVault approval. Only
+// current-chain-native/unregistered withdrawals need the approval step.
 const requiresNativeTokenApproval = computed(() => {
   return props.type === "withdrawal" && !!isNativeToken.value && !amountToTransferIsApproved.value;
 });

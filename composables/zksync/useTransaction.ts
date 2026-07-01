@@ -28,6 +28,7 @@ type TransactionParams = {
   tokenAddress: string;
   amount: BigNumberish;
   isNativeToken?: boolean | null;
+  // SYSCOIN: separates v31 asset-id withdrawal calldata from approval gating.
   usesAssetIdWithdrawal?: boolean;
   assetId?: string | null;
   bridgeAddress?: string;

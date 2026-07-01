@@ -25,6 +25,8 @@ export type FeeEstimationParams = {
   to: string;
   tokenAddress: string;
   isNativeToken: boolean | null;
+  // SYSCOIN: v31 withdrawals may route through L2AssetRouter's asset-id
+  // overload without necessarily requiring NativeTokenVault allowance.
   usesAssetIdWithdrawal?: boolean;
   assetId?: string | null;
   amount: string;

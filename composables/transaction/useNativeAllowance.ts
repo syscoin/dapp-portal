@@ -9,6 +9,8 @@ import { useSentryLogger } from "../useSentryLogger";
 import type { Hash } from "@/types";
 import type { Address } from "viem";
 
+// SYSCOIN: v31 NativeTokenVault uses zero bytes32 as the "not registered"
+// sentinel for asset-id withdrawals.
 const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount: Ref<bigint>) => {
@@ -17,6 +19,9 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
   const { captureException } = useSentryLogger();
 
   const isNativeToken = ref<boolean | null>(null);
+  // SYSCOIN: keep asset-id withdrawal routing separate from allowance gating.
+  // Registered L1-origin tokens can use the asset-id route without requiring
+  // NativeTokenVault approval; unregistered/current-chain-native tokens do.
   const usesAssetIdWithdrawal = ref(false);
   const allowanceCheckInProgress = ref<boolean>(false);
   const assetId = ref<null | string>(null);
@@ -56,6 +61,9 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
         const needsRegistration = checkedAssetId === ZERO_HASH;
         let originChainId: bigint | undefined;
         if (needsRegistration) {
+          // SYSCOIN: unregistered v31 tokens such as freshly deployed zkSYS
+          // need a persisted asset id before the asset-router withdrawal can
+          // be estimated or submitted.
           checkedAssetId = (await readContract(wagmiConfig, {
             address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
             abi: L2_NATIVE_TOKEN_VAULT_ABI,
@@ -75,6 +83,9 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
         if (nonce !== allowanceCheckNonce) return;
         assetId.value = checkedAssetId;
         tokenRegistrationRequired.value = needsRegistration;
+        // SYSCOIN: fresh v31 withdrawals use asset ids for non-base ERC20s.
+        // The separate `isNativeToken` flag only tracks whether the user must
+        // approve the NativeTokenVault before withdrawing.
         usesAssetIdWithdrawal.value = true;
         isNativeToken.value = needsRegistration || originChainId === BigInt(eraNetwork.value.id);
 
@@ -153,6 +164,8 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
         const receipts = [];
 
         if (tokenRegistrationRequired.value) {
+          // SYSCOIN: registration is permissionless but state-changing; include
+          // it in the approval flow so the later withdrawal has a stable asset id.
           setAllowanceStatus.value = "waiting-for-signature";
           const txRegisterHash = await writeContract(wagmiConfig, {
             chainId: eraNetwork.value.id,

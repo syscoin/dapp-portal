@@ -175,6 +175,9 @@ export const resolveSyscoinL2TokenMappings = async (
 
       if (!l2Address || isAddressEqual(getAddress(l2Address), zeroAddress)) return;
 
+      // SYSCOIN: an L1 wrapper can be unknown to Blockscout while its L2 token
+      // is already part of the curated registry. Preserve the official L2
+      // metadata when resolving future wrapper mappings.
       const officialL2Token = matchingOfficialToken(l2Address, "L2", officialTokens);
       mappings.set(l1Address.toLowerCase(), {
         ...l1Token,

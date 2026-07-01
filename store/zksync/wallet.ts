@@ -163,6 +163,9 @@ export const useZkSyncWalletStore = defineStore("zkSyncWallet", () => {
       amount: balance.amount,
     }));
 
+    // SYSCOIN: Blockscout can lag or omit curated L2-origin tokens such as
+    // ZKSYS. Read official registry token balances directly from zkTanenbaum RPC
+    // and let those values override stale/missing explorer rows.
     const officialRpcBalances = await Promise.all(
       registry.l2Tokens
         .filter((token) => token.address.toUpperCase() !== L2_BASE_TOKEN_ADDRESS.toUpperCase())
