@@ -1,9 +1,11 @@
-import { estimateGas, getPublicClient } from "@wagmi/core";
+import { estimateGas, getPublicClient, readContract } from "@wagmi/core";
 import { AbiCoder } from "ethers";
 import { encodeFunctionData } from "viem";
 import { EIP712_TX_TYPE } from "zksync-ethers/build/utils";
 
+import { L2_NATIVE_TOKEN_VAULT_ABI } from "@/data/abis/nativeTokenVaultAbi";
 import { wagmiConfig } from "@/data/wagmi";
+import { L2_NATIVE_TOKEN_VAULT_ADDRESS } from "@/utils/constants";
 import {
   SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT,
   buildSyscoinNativeTokenWithdrawTransaction,
@@ -18,6 +20,8 @@ import type { Token, TokenAmount } from "@/types";
 import type { BigNumberish, ethers } from "ethers";
 import type { Provider } from "zksync-ethers";
 import type { Address, PaymasterParams } from "zksync-ethers/build/types";
+
+const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 export type FeeEstimationParams = {
   type: "transfer" | "withdrawal";
@@ -145,7 +149,19 @@ export default (
         retry(async () => {
           const isCustomBridgeToken = !!token?.l2BridgeAddress;
           if (isSyscoinBridgeNetwork(selectedNetwork.value)) {
-            if (params!.type === "withdrawal" && !isSyscoinL2BaseToken(params!.tokenAddress) && !params!.assetId) {
+            const isSyscoinErc20Withdrawal =
+              params!.type === "withdrawal" && !isSyscoinL2BaseToken(params!.tokenAddress);
+            const syscoinWithdrawalAssetId =
+              isSyscoinErc20Withdrawal && !params!.assetId
+                ? ((await readContract(wagmiConfig, {
+                    address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
+                    abi: L2_NATIVE_TOKEN_VAULT_ABI,
+                    functionName: "assetId",
+                    args: [params!.tokenAddress],
+                    chainId: selectedNetwork.value.id,
+                  })) as string)
+                : params!.assetId;
+            if (isSyscoinErc20Withdrawal && (!syscoinWithdrawalAssetId || syscoinWithdrawalAssetId === ZERO_HASH)) {
               resetFee();
               return;
             }
@@ -158,15 +174,15 @@ export default (
                     l2Token: params!.tokenAddress as `0x${string}`,
                     amount: BigInt(params!.amount),
                   })
-                : params!.usesAssetIdWithdrawal && params!.assetId
+                : params!.usesAssetIdWithdrawal && syscoinWithdrawalAssetId
                 ? buildSyscoinNativeTokenWithdrawTransaction({
-                    assetId: params!.assetId as `0x${string}`,
+                    assetId: syscoinWithdrawalAssetId as `0x${string}`,
                     l1Receiver: params!.to as `0x${string}`,
                     l2Token: params!.tokenAddress as `0x${string}`,
                     amount: BigInt(params!.amount),
                   })
                 : buildSyscoinWithdrawTransaction({
-                    assetId: params!.assetId as `0x${string}` | null,
+                    assetId: syscoinWithdrawalAssetId as `0x${string}` | null,
                     l1Receiver: params!.to as `0x${string}`,
                     l2Token: params!.tokenAddress as `0x${string}`,
                     amount: BigInt(params!.amount),

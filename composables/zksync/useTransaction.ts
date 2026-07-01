@@ -1,18 +1,27 @@
 import { useMemoize } from "@vueuse/core";
-import { getWalletClient, getPublicClient, prepareTransactionRequest, custom, sendTransaction } from "@wagmi/core";
+import {
+  getWalletClient,
+  getPublicClient,
+  prepareTransactionRequest,
+  custom,
+  sendTransaction,
+  readContract,
+} from "@wagmi/core";
 import { ethers, type BigNumberish, type ContractTransaction } from "ethers";
 import { createWalletClient, type Hash } from "viem";
 import { eip712WalletActions } from "viem/zksync";
 import { EIP712_TX_TYPE } from "zksync-ethers/build/utils";
 
+import { L2_NATIVE_TOKEN_VAULT_ABI } from "@/data/abis/nativeTokenVaultAbi";
 import { isCustomNode } from "@/data/networks";
-import { L2_BASE_TOKEN_ADDRESS } from "@/utils/constants";
+import { L2_BASE_TOKEN_ADDRESS, L2_NATIVE_TOKEN_VAULT_ADDRESS } from "@/utils/constants";
 import {
   buildSyscoinNativeTokenWithdrawTransaction,
   buildSyscoinTransferTransaction,
   buildSyscoinWithdrawTransaction,
   getSyscoinL2FeeOverrides,
   isSyscoinBridgeNetwork,
+  isSyscoinL2BaseToken,
 } from "@/utils/syscoinBridge";
 import { wagmiConfig } from "~/data/wagmi";
 
@@ -21,6 +30,8 @@ import { useSentryLogger } from "../useSentryLogger";
 import type { TokenAmount } from "@/types";
 import type { Provider, Signer } from "zksync-ethers";
 import type { Address, PaymasterParams } from "zksync-ethers/build/types";
+
+const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 type TransactionParams = {
   type: "transfer" | "withdrawal";
@@ -105,6 +116,21 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
       status.value = "waiting-for-signature";
 
       if (isSyscoinBridgeNetwork(selectedNetwork.value)) {
+        const isSyscoinErc20Withdrawal =
+          transaction.type === "withdrawal" && !isSyscoinL2BaseToken(transaction.tokenAddress);
+        const syscoinWithdrawalAssetId =
+          isSyscoinErc20Withdrawal && !transaction.assetId
+            ? ((await readContract(wagmiConfig, {
+                address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
+                abi: L2_NATIVE_TOKEN_VAULT_ABI,
+                functionName: "assetId",
+                args: [transaction.tokenAddress],
+                chainId: selectedNetwork.value.id,
+              })) as string)
+            : transaction.assetId;
+        if (isSyscoinErc20Withdrawal && (!syscoinWithdrawalAssetId || syscoinWithdrawalAssetId === ZERO_HASH)) {
+          throw new Error("Asset id is required for Syscoin ERC20 withdrawals");
+        }
         // SYSCOIN: zkSYS uses standard EVM transactions. Avoid ZKsync SDK
         // EIP-712 tx type 0x71 and zks_gasPerPubdata for account transfers.
         // Withdrawals still call OS system contracts directly and are claimed
@@ -116,15 +142,15 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
                 l2Token: transaction.tokenAddress as `0x${string}`,
                 amount: BigInt(transaction.amount.toString()),
               })
-            : transaction.usesAssetIdWithdrawal && transaction.assetId
+            : transaction.usesAssetIdWithdrawal && syscoinWithdrawalAssetId
             ? buildSyscoinNativeTokenWithdrawTransaction({
-                assetId: transaction.assetId as `0x${string}`,
+                assetId: syscoinWithdrawalAssetId as `0x${string}`,
                 l1Receiver: transaction.to as `0x${string}`,
                 l2Token: transaction.tokenAddress as `0x${string}`,
                 amount: BigInt(transaction.amount.toString()),
               })
             : buildSyscoinWithdrawTransaction({
-                assetId: transaction.assetId as `0x${string}` | null,
+                assetId: syscoinWithdrawalAssetId as `0x${string}` | null,
                 l1Receiver: transaction.to as `0x${string}`,
                 l2Token: transaction.tokenAddress as `0x${string}`,
                 amount: BigInt(transaction.amount.toString()),
