@@ -50,6 +50,8 @@ export default (
   });
 
   const feeToken = computed(() => {
+    // SYSCOIN: the system-contract constant is lowercased for RPC calls, but
+    // token maps can be keyed by checksummed registry addresses.
     return Object.values(tokens.value ?? {}).find(
       (token) => token.address.toUpperCase() === L2_BASE_TOKEN_ADDRESS.toUpperCase()
     );

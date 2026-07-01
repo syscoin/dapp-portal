@@ -80,6 +80,8 @@ export const useZkSyncTokensStore = defineStore("zkSyncTokens", () => {
     }
 
     const tokens = explorerTokens.length ? explorerTokens : configTokens;
+    // SYSCOIN: keep base-token filtering case-insensitive because zkSYS system
+    // contract constants are lowercased while registry entries may be checksummed.
     const nonBaseOrEthExplorerTokens = tokens.filter(
       (token) =>
         token.address.toUpperCase() !== L2_BASE_TOKEN_ADDRESS.toUpperCase() &&
