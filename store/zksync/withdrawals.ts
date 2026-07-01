@@ -85,19 +85,32 @@ export const useZkSyncWithdrawalsStore = defineStore("zkSyncWithdrawals", () => 
   };
 
   const findSyscoinWithdrawalToken = (
-    l1Token: Address,
+    parsedToken: Address,
     registryTokens: Token[] = []
   ): Omit<TokenAmount, "amount"> | undefined => {
     const network = eraNetwork.value;
     if (!isSyscoinBridgeNetwork(network)) return undefined;
 
-    const officialToken = (network.syscoinBridge.officialTokens ?? []).find(
-      (token) => token.l1Address && isAddressEqual(getAddress(token.l1Address), l1Token)
-    );
+    const matchesParsedToken = (token: Pick<Token, "address" | "l1Address" | "l2Address">) => {
+      return (
+        isAddressEqual(getAddress(token.address), parsedToken) ||
+        (!!token.l1Address && isAddressEqual(getAddress(token.l1Address), parsedToken)) ||
+        (!!token.l2Address && isAddressEqual(getAddress(token.l2Address), parsedToken))
+      );
+    };
+
+    // SYSCOIN: v31 asset-router withdrawal messages can identify either the
+    // L1-origin token or the L2 token carried in asset-id burn metadata. Match
+    // both forms so claim recovery works after reloads for arbitrary positive
+    // balance L2 tokens.
+    const officialToken = (network.syscoinBridge.officialTokens ?? []).find((token) => matchesParsedToken(token));
     if (officialToken) return officialToken;
 
     const customToken = customBridgeTokens.find(
-      (token) => token.chainId === network.l1Network?.id && isAddressEqual(getAddress(token.l1Address), l1Token)
+      (token) =>
+        token.chainId === network.l1Network?.id &&
+        (isAddressEqual(getAddress(token.l1Address), parsedToken) ||
+          isAddressEqual(getAddress(token.l2Address), parsedToken))
     );
     if (customToken) {
       return {
@@ -113,9 +126,7 @@ export const useZkSyncWithdrawalsStore = defineStore("zkSyncWithdrawals", () => 
       };
     }
 
-    const registryToken = registryTokens.find(
-      (token) => token.l1Address && isAddressEqual(getAddress(token.l1Address), l1Token)
-    );
+    const registryToken = registryTokens.find((token) => matchesParsedToken(token));
     if (registryToken) return registryToken;
   };
 
