@@ -220,18 +220,21 @@
           v-if="step === 'form'"
           :opened="
             type === 'withdrawal' &&
-            !!isNativeToken &&
-            (showWithdrawalAllowanceProcess || !amountToTransferIsApproved || setAllowanceTransactionHashes.length > 0)
+            usesAssetIdWithdrawal &&
+            (showWithdrawalAllowanceProcess || (!!isNativeToken && setAllowanceTransactionHashes.length > 0))
           "
         >
           <AllowancePanel
-            v-if="selectedToken && approvedAllowance != null"
+            v-if="selectedToken && assetId"
             :selected-token="selectedToken"
             :token-address="selectedTokenAddress!"
             :asset-id="assetId!"
             :enough-allowance="amountToTransferIsApproved"
             :block-explorer-url="eraNetwork.blockExplorerUrl"
-            :allowance="approvedAllowance"
+            :allowance="approvedAllowance ?? 0n"
+            :registration-required="tokenRegistrationRequired"
+            :migration-required="tokenMigrationRequired"
+            :migration-initiated="tokenMigrationInitiated"
             :set-allowance-receipts="approveAllowanceReceipt"
             :set-allowance-transaction-hashes="setAllowanceTransactionHashes"
             @set-amount="handleSetAmount"
@@ -246,19 +249,20 @@
                   type="submit"
                   variant="primary"
                   class="w-full"
-                  :disabled="setAllowanceStatus !== 'not-started' || approveAllowanceInProgress"
+                  :disabled="
+                    (setAllowanceStatus !== 'not-started' && setAllowanceStatus !== 'done') ||
+                    approveAllowanceInProgress
+                  "
                   @click="setTokenAllowance()"
                 >
                   <transition v-bind="TransitionPrimaryButtonText" mode="out-in">
                     <span v-if="setAllowanceStatus === 'processing'">Processing...</span>
-                    <span v-else-if="setAllowanceStatus === 'waiting-for-signature'"
-                      >Waiting for allowance approval confirmation</span
-                    >
+                    <span v-else-if="setAllowanceStatus === 'waiting-for-signature'">Waiting for confirmation</span>
                     <span v-else-if="setAllowanceStatus === 'sending'" class="flex items-center">
                       <CommonSpinner class="mr-2 h-6 w-6" />
-                      Approving allowance...
+                      {{ withdrawalPreparationInFlightLabel }}
                     </span>
-                    <span v-else>Approve {{ selectedToken?.symbol }} allowance</span>
+                    <span v-else>{{ withdrawalPreparationButtonLabel }}</span>
                   </transition>
                 </CommonButton>
               </template>
@@ -593,6 +597,9 @@ const {
   isNativeToken,
   usesAssetIdWithdrawal,
   assetId,
+  tokenRegistrationRequired,
+  tokenMigrationRequired,
+  tokenMigrationInitiated,
   allowanceCheckInProgress,
   amountToTransferIsApproved,
   approvedAllowance,
@@ -620,12 +627,26 @@ const requiresNativeTokenApproval = computed(() => {
 const showWithdrawalAllowanceProcess = computed(() => {
   return props.type === "withdrawal" && showAllowanceProcess.value;
 });
+const withdrawalPreparationButtonLabel = computed(() => {
+  if (tokenRegistrationRequired.value) return `Register ${selectedToken.value?.symbol}`;
+  if (tokenMigrationRequired.value) {
+    return tokenMigrationInitiated.value
+      ? "Check Gateway migration status"
+      : `Migrate ${selectedToken.value?.symbol} to Gateway`;
+  }
+  return `Approve ${selectedToken.value?.symbol} allowance`;
+});
+const withdrawalPreparationInFlightLabel = computed(() => {
+  if (tokenRegistrationRequired.value) return "Registering token...";
+  if (tokenMigrationRequired.value) return "Initiating Gateway migration...";
+  return "Approving allowance...";
+});
 const feeLoading = computed(() => feeInProgress.value || (!fee.value && balanceInProgress.value));
 const estimate = async () => {
   if (allowanceCheckInProgress.value) {
     return;
   }
-  if (requiresNativeTokenApproval.value) {
+  if (showWithdrawalAllowanceProcess.value) {
     return;
   }
 
@@ -706,7 +727,7 @@ const continueButtonDisabled = computed(() => {
   }
   if (feeLoading.value || !fee.value) return true;
   if (allowanceCheckInProgress.value) return true;
-  if (requiresNativeTokenApproval.value) {
+  if (showWithdrawalAllowanceProcess.value) {
     return true;
   }
   return false;

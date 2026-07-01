@@ -11,7 +11,7 @@ import {
   type Hex,
 } from "viem";
 
-import { L2_ASSET_ROUTER_ADDRESS, L2_BASE_TOKEN_ADDRESS } from "./constants";
+import { L2_ASSET_ROUTER_ADDRESS, L2_ASSET_TRACKER_ADDRESS, L2_BASE_TOKEN_ADDRESS } from "./constants";
 
 import type { ZkSyncNetwork } from "@/data/networks";
 
@@ -43,13 +43,17 @@ export const SYSCOIN_BRIDGEHUB_ABI = parseAbi([
 export const SYSCOIN_L2_BASE_TOKEN_ABI = parseAbi(["function withdraw(address l1Receiver) payable"]);
 
 export const SYSCOIN_L2_ASSET_ROUTER_ABI = parseAbi([
-  "function withdraw(address l1Receiver, address l2Token, uint256 amount)",
   "function withdraw(bytes32 assetId, bytes assetData) returns (bytes32)",
   "function l2TokenAddress(address l1Token) view returns (address)",
 ]);
 
-const SYSCOIN_L2_ASSET_ROUTER_NATIVE_WITHDRAW_ABI = parseAbi([
-  "function withdraw(bytes32 assetId, bytes assetData) returns (bytes32)",
+export const SYSCOIN_L2_ASSET_TRACKER_ABI = parseAbi([
+  "function initiateL1ToGatewayMigrationOnL2(bytes32 assetId)",
+  "function tokenMigratedThisChain(bytes32 assetId) view returns (bool)",
+]);
+
+export const SYSCOIN_L2_SYSTEM_CONTEXT_ABI = parseAbi([
+  "function currentSettlementLayerChainId() view returns (uint256)",
 ]);
 
 export const SYSCOIN_ERC20_ABI = parseAbi([
@@ -127,11 +131,21 @@ export const buildSyscoinL2BaseTokenWithdrawData = (l1Receiver: Address) => {
   });
 };
 
-export const buildSyscoinErc20WithdrawData = (l1Receiver: Address, l2Token: Address, amount: bigint) => {
+export const buildSyscoinErc20WithdrawData = (params: {
+  assetId: Hex;
+  l1Receiver: Address;
+  l2Token: Address;
+  amount: bigint;
+}) => {
+  const assetData = encodeAbiParameters(
+    [{ type: "uint256" }, { type: "address" }, { type: "address" }],
+    [params.amount, params.l1Receiver, params.l2Token]
+  );
+
   return encodeFunctionData({
     abi: SYSCOIN_L2_ASSET_ROUTER_ABI,
     functionName: "withdraw",
-    args: [l1Receiver, l2Token, amount],
+    args: [params.assetId, assetData],
   });
 };
 
@@ -153,14 +167,27 @@ export const buildSyscoinTransferTransaction = (params: { recipient: Address; l2
   };
 };
 
-export const buildSyscoinWithdrawTransaction = (params: { l1Receiver: Address; l2Token: Address; amount: bigint }) => {
+export const buildSyscoinWithdrawTransaction = (params: {
+  assetId?: Hex | null;
+  l1Receiver: Address;
+  l2Token: Address;
+  amount: bigint;
+}) => {
   const isBaseToken = isSyscoinL2BaseToken(params.l2Token);
+  if (!isBaseToken && !params.assetId) {
+    throw new Error("Asset id is required for Syscoin ERC20 withdrawals");
+  }
 
   return {
     to: (isBaseToken ? L2_BASE_TOKEN_ADDRESS : L2_ASSET_ROUTER_ADDRESS) as Address,
     data: isBaseToken
       ? buildSyscoinL2BaseTokenWithdrawData(params.l1Receiver)
-      : buildSyscoinErc20WithdrawData(params.l1Receiver, params.l2Token, params.amount),
+      : buildSyscoinErc20WithdrawData({
+          assetId: params.assetId!,
+          l1Receiver: params.l1Receiver,
+          l2Token: params.l2Token,
+          amount: params.amount,
+        }),
     value: isBaseToken ? params.amount : 0n,
   };
 };
@@ -171,17 +198,18 @@ export const buildSyscoinNativeTokenWithdrawTransaction = (params: {
   l2Token: Address;
   amount: bigint;
 }) => {
-  const assetData = encodeAbiParameters(
-    [{ type: "uint256" }, { type: "address" }, { type: "address" }],
-    [params.amount, params.l1Receiver, params.l2Token]
-  );
+  // SYSCOIN: kept as a compatibility alias; v31 uses the same asset-id
+  // withdrawal path for every non-base ERC20, not only current-chain-native ERC20s.
+  return buildSyscoinWithdrawTransaction(params);
+};
 
+export const buildSyscoinGatewayMigrationTransaction = (assetId: Hex) => {
   return {
-    to: L2_ASSET_ROUTER_ADDRESS as Address,
+    to: L2_ASSET_TRACKER_ADDRESS as Address,
     data: encodeFunctionData({
-      abi: SYSCOIN_L2_ASSET_ROUTER_NATIVE_WITHDRAW_ABI,
-      functionName: "withdraw",
-      args: [params.assetId, assetData],
+      abi: SYSCOIN_L2_ASSET_TRACKER_ABI,
+      functionName: "initiateL1ToGatewayMigrationOnL2",
+      args: [assetId],
     }),
     value: 0n,
   };
