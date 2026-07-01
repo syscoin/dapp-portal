@@ -215,10 +215,14 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
             (selectedAssetId == null || assetId.value === selectedAssetId)
           );
         };
+        const stopStalePreparation = () => {
+          setAllowanceStatus.value = "not-started";
+          return receipts;
+        };
 
         if (tokenRegistrationRequired.value) {
           const registeredTokenAddress = tokenAddress.value;
-          if (!registeredTokenAddress) return receipts;
+          if (!registeredTokenAddress) return stopStalePreparation();
           // SYSCOIN: registration is permissionless but state-changing; include
           // it in the approval flow so the later withdrawal has a stable asset id.
           setAllowanceStatus.value = "waiting-for-signature";
@@ -248,7 +252,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
               }
             )
           );
-          if (!selectionMatches(registeredTokenAddress)) return receipts;
+          if (!selectionMatches(registeredTokenAddress)) return stopStalePreparation();
           tokenRegistrationRequired.value = false;
           const registeredAssetId = (await readContract(wagmiConfig, {
             address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
@@ -258,7 +262,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
             chainId: eraNetwork.value.id,
           })) as string;
           const migrationRequired = await checkTokenMigrationRequired(registeredAssetId);
-          if (!selectionMatches(registeredTokenAddress)) return receipts;
+          if (!selectionMatches(registeredTokenAddress)) return stopStalePreparation();
           assetId.value = registeredAssetId;
           tokenMigrationRequired.value = migrationRequired;
         }
@@ -299,12 +303,12 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
                 }
               )
             );
-            if (!selectionMatches(migrationTokenAddress, migrationAssetId)) return receipts;
+            if (!selectionMatches(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
             tokenMigrationInitiated.value = true;
           }
 
           const migrationRequired = await checkTokenMigrationRequired(migrationAssetId);
-          if (!selectionMatches(migrationTokenAddress, migrationAssetId)) return receipts;
+          if (!selectionMatches(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
           tokenMigrationRequired.value = migrationRequired;
           if (migrationRequired) {
             setAllowanceStatus.value = "done";
@@ -314,7 +318,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
 
         if (isNativeToken.value && amount.value > (approvedAllowance.value ?? 0n)) {
           const approvalTokenAddress = tokenAddress.value;
-          if (!approvalTokenAddress) return receipts;
+          if (!approvalTokenAddress) return stopStalePreparation();
           setAllowanceStatus.value = "waiting-for-signature";
           const txApproveHash = await writeContract(wagmiConfig, {
             chainId: eraNetwork.value.id,
@@ -344,12 +348,12 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
               }
             )
           );
-          if (!selectionMatches(approvalTokenAddress)) return receipts;
+          if (!selectionMatches(approvalTokenAddress)) return stopStalePreparation();
         }
 
         if (isNativeToken.value) {
           const allowanceTokenAddress = tokenAddress.value;
-          if (!allowanceTokenAddress) return receipts;
+          if (!allowanceTokenAddress) return stopStalePreparation();
           const allowance = (await readContract(wagmiConfig, {
             chainId: eraNetwork.value.id,
             address: allowanceTokenAddress as Address,
@@ -357,7 +361,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
             functionName: "allowance",
             args: [accountAddress, L2_NATIVE_TOKEN_VAULT_ADDRESS],
           })) as bigint;
-          if (!selectionMatches(allowanceTokenAddress)) return receipts;
+          if (!selectionMatches(allowanceTokenAddress)) return stopStalePreparation();
           approvedAllowance.value = allowance;
         }
 
