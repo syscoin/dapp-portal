@@ -16,7 +16,7 @@ export const useZkSyncWalletStore = defineStore("zkSyncWallet", () => {
   const providerStore = useZkSyncProviderStore();
   const tokensStore = useZkSyncTokensStore();
   const { eraNetwork } = storeToRefs(providerStore);
-  const { tokens } = storeToRefs(tokensStore);
+  const { baseToken, tokens } = storeToRefs(tokensStore);
   const { account } = storeToRefs(onboardStore);
   const { validateAddress } = useScreening();
 
@@ -138,11 +138,10 @@ export const useZkSyncWalletStore = defineStore("zkSyncWallet", () => {
     // SYSCOIN: L2 Blockscout lists L2-created and bridged ERC20 balances for
     // transfer views. Withdraw views already filter to tokens with l1Address.
     const provider = await providerStore.requestProvider();
-    const baseToken = tokens.value[L2_BASE_TOKEN_ADDRESS];
-    const nativeBalance = baseToken
+    const nativeBalance = baseToken.value
       ? [
           {
-            ...baseToken,
+            ...baseToken.value,
             amount: (await provider.getBalance(accountAddress)).toString(),
           },
         ]

@@ -81,7 +81,9 @@ export const useZkSyncTokensStore = defineStore("zkSyncTokens", () => {
 
     const tokens = explorerTokens.length ? explorerTokens : configTokens;
     const nonBaseOrEthExplorerTokens = tokens.filter(
-      (token) => token.address !== L2_BASE_TOKEN_ADDRESS && token.address !== ethL2TokenAddress
+      (token) =>
+        token.address.toUpperCase() !== L2_BASE_TOKEN_ADDRESS.toUpperCase() &&
+        token.address.toUpperCase() !== ethL2TokenAddress.toUpperCase()
     );
     return [
       baseToken,

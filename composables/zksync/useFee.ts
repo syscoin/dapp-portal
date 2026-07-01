@@ -50,7 +50,9 @@ export default (
   });
 
   const feeToken = computed(() => {
-    return tokens.value?.[L2_BASE_TOKEN_ADDRESS];
+    return Object.values(tokens.value ?? {}).find(
+      (token) => token.address.toUpperCase() === L2_BASE_TOKEN_ADDRESS.toUpperCase()
+    );
   });
   const enoughBalanceToCoverFee = computed(() => {
     if (!feeToken.value || inProgress.value) {

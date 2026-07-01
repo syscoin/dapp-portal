@@ -1,4 +1,5 @@
 import { readContract, getAccount, writeContract, waitForTransactionReceipt } from "@wagmi/core";
+import { encodeFunctionData, type Address, type Hex } from "viem";
 
 import { IERC20_ABI } from "@/data/abis/ierc20Abi";
 import { L2_NATIVE_TOKEN_VAULT_ABI } from "@/data/abis/nativeTokenVaultAbi";
@@ -22,7 +23,6 @@ import {
 import { useSentryLogger } from "../useSentryLogger";
 
 import type { Hash } from "@/types";
-import type { Address } from "viem";
 
 // SYSCOIN: v31 NativeTokenVault uses zero bytes32 as the "not registered"
 // sentinel for asset-id withdrawals.
@@ -40,6 +40,11 @@ const isTransactionHash = (value: unknown): value is Hash => {
 type StoredTokenMigrationInitiation = {
   hash: Hash;
   createdAt: number;
+};
+type RpcTransaction = {
+  to?: string;
+  input?: Hex;
+  data?: Hex;
 };
 
 const getTokenMigrationInitiationStorageKey = (chainId: number, account: string, assetId: string) => {
@@ -148,23 +153,24 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
     hash: Hash,
     migrationAssetId: string
   ) => {
+    const transaction = (await provider.send("eth_getTransactionByHash", [hash])) as RpcTransaction | null;
+    if (!transaction) return false;
+    const input = transaction.input ?? transaction.data;
+    const expectedInput = encodeFunctionData({
+      abi: SYSCOIN_L2_ASSET_TRACKER_ABI,
+      functionName: "initiateL1ToGatewayMigrationOnL2",
+      args: [migrationAssetId as `0x${string}`],
+    });
+    if (!transaction.to || transaction.to.toLowerCase() !== L2_ASSET_TRACKER_ADDRESS.toLowerCase()) return false;
+    if (input?.toLowerCase() !== expectedInput.toLowerCase()) return false;
+
     const receipt = await provider.send("eth_getTransactionReceipt", [hash]);
     // A just-submitted tx can be pending after refresh; keep the hash and let
     // proof retrieval report "not mined yet" instead of starting a duplicate tx.
     if (!receipt) return true;
     if (receipt.status !== "0x1") return false;
     if (!receipt.to || receipt.to.toLowerCase() !== L2_ASSET_TRACKER_ADDRESS.toLowerCase()) return false;
-
-    const emittedAssetMigrationEvent = (receipt.logs ?? []).some(
-      (log: { address?: string; topics?: string[] }) =>
-        log.address?.toLowerCase() === L2_ASSET_TRACKER_ADDRESS.toLowerCase() &&
-        log.topics?.[1]?.toLowerCase() === migrationAssetId.toLowerCase()
-    );
-    const emittedSettlementMessage = (receipt.l2ToL1Logs ?? []).some(
-      (log: { key?: string }) => log.key?.toLowerCase() === L2_ASSET_TRACKER_ADDRESS.toLowerCase()
-    );
-
-    return emittedAssetMigrationEvent && emittedSettlementMessage;
+    return true;
   };
 
   const currentSettlementLayerChainId = async () => {
