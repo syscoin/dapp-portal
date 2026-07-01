@@ -44,6 +44,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
     "not-started"
   );
   const setAllowanceTransactionHashes = ref<(Hash | undefined)[]>([]);
+  let resetPendingApproveAllowance = () => {};
   let allowanceCheckNonce = 0;
 
   const currentSettlementLayerChainId = async () => {
@@ -85,6 +86,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
       approvedAllowance.value = null;
       setAllowanceStatus.value = "not-started";
       setAllowanceTransactionHashes.value = [];
+      resetPendingApproveAllowance();
 
       if (!tokenAddress.value) {
         isNativeToken.value = null;
@@ -199,13 +201,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
     return isNativeToken.value;
   });
 
-  const {
-    result: approveAllowanceReceipt,
-    inProgress: approveAllowanceInProgress,
-    error: approveAllowanceError,
-    execute: executeApproveAllowance,
-    reset: resetExecuteApproveAllowance,
-  } = usePromise(
+  const approveAllowancePromise = usePromise(
     async () => {
       try {
         setAllowanceStatus.value = "processing";
@@ -382,6 +378,14 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
     },
     { cache: false }
   );
+  resetPendingApproveAllowance = approveAllowancePromise.reset;
+  const {
+    result: approveAllowanceReceipt,
+    inProgress: approveAllowanceInProgress,
+    error: approveAllowanceError,
+    execute: executeApproveAllowance,
+    reset: resetExecuteApproveAllowance,
+  } = approveAllowancePromise;
 
   const showAllowanceProcess = computed(() => {
     if (tokenRegistrationRequired.value || tokenMigrationRequired.value) {
