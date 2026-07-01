@@ -79,8 +79,12 @@ const writeStoredTokenMigrationHash = (
   hash: Hash
 ) => {
   if (typeof window === "undefined" || !account) return;
-  const value: StoredTokenMigrationTransaction = { hash, createdAt: Date.now() };
-  window.localStorage.setItem(getTokenMigrationStorageKey(prefix, chainId, account, assetId), JSON.stringify(value));
+  try {
+    const value: StoredTokenMigrationTransaction = { hash, createdAt: Date.now() };
+    window.localStorage.setItem(getTokenMigrationStorageKey(prefix, chainId, account, assetId), JSON.stringify(value));
+  } catch {
+    // Storage is only a recovery hint; never fail the on-chain flow for it.
+  }
 };
 
 const clearStoredTokenMigrationHash = (
@@ -90,7 +94,11 @@ const clearStoredTokenMigrationHash = (
   assetId: string
 ) => {
   if (typeof window === "undefined" || !account) return;
-  window.localStorage.removeItem(getTokenMigrationStorageKey(prefix, chainId, account, assetId));
+  try {
+    window.localStorage.removeItem(getTokenMigrationStorageKey(prefix, chainId, account, assetId));
+  } catch {
+    // Storage is only a recovery hint; never fail the on-chain flow for it.
+  }
 };
 
 export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount: Ref<bigint>) => {
