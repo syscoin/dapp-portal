@@ -10,8 +10,12 @@ import {
   L2_SYSTEM_CONTEXT_ADDRESS,
 } from "@/utils/constants";
 import {
+  SYSCOIN_BRIDGEHUB_ABI,
+  SYSCOIN_L1_ASSET_TRACKER_ABI,
+  SYSCOIN_L1_RECEIPT_TIMEOUT,
   SYSCOIN_L2_ASSET_TRACKER_ABI,
   SYSCOIN_L2_SYSTEM_CONTEXT_ABI,
+  getSyscoinGatewayMigrationFinalizeParams,
   isSyscoinBridgeNetwork,
 } from "@/utils/syscoinBridge";
 
@@ -25,6 +29,7 @@ import type { Address } from "viem";
 const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount: Ref<bigint>) => {
+  const onboardStore = useOnboardStore();
   const providerStore = useZkSyncProviderStore();
   const { eraNetwork } = storeToRefs(providerStore);
   const { captureException } = useSentryLogger();
@@ -39,6 +44,8 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
   const tokenRegistrationRequired = ref(false);
   const tokenMigrationRequired = ref(false);
   const tokenMigrationInitiated = ref(false);
+  const tokenMigrationInitiationHash = ref<Hash | undefined>();
+  const tokenMigrationFinalizationHash = ref<Hash | undefined>();
   const approvedAllowance = ref<null | bigint>(null);
   const setAllowanceStatus = ref<"not-started" | "processing" | "waiting-for-signature" | "sending" | "done">(
     "not-started"
@@ -93,6 +100,8 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
       tokenRegistrationRequired.value = false;
       tokenMigrationRequired.value = false;
       tokenMigrationInitiated.value = false;
+      tokenMigrationInitiationHash.value = undefined;
+      tokenMigrationFinalizationHash.value = undefined;
       approvedAllowance.value = null;
       setAllowanceStatus.value = "not-started";
       setAllowanceTransactionHashes.value = [];
@@ -283,11 +292,10 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
       const migrationAssetId = assetId.value;
       const migrationTokenAddress = tokenAddress.value;
       if (tokenMigrationRequired.value && migrationAssetId) {
-        if (!tokenMigrationInitiated.value) {
+        if (!tokenMigrationInitiationHash.value) {
           // SYSCOIN: v31 Gateway-settled chains require each asset's balance
           // accounting to be migrated before withdrawals / interop can leave
-          // the chain. The initiation is permissionless but confirmation is
-          // completed later by the system service transaction.
+          // the chain. This first leg emits the L2->settlement-layer message.
           setAllowanceStatus.value = "waiting-for-signature";
           const txMigrationHash = await writeContract(wagmiConfig, {
             chainId: eraNetwork.value.id,
@@ -299,6 +307,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
 
           if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
           setAllowanceTransactionHashes.value.push(txMigrationHash);
+          tokenMigrationInitiationHash.value = txMigrationHash;
           setAllowanceStatus.value = "sending";
           receipts.push(
             await retry(
@@ -321,6 +330,90 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
           );
           if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
           tokenMigrationInitiated.value = true;
+        }
+
+        if (isSyscoinBridgeNetwork(eraNetwork.value) && tokenMigrationInitiationHash.value) {
+          const l1Network = eraNetwork.value.l1Network;
+          if (!l1Network) throw new Error(`L1 network is not available on ${eraNetwork.value.name}`);
+          const l1ChainId = l1Network.id;
+
+          if (!tokenMigrationFinalizationHash.value) {
+            const l2Provider = await providerStore.requestProvider();
+            let finalizeMigrationParams;
+            try {
+              finalizeMigrationParams = await retry(
+                () =>
+                  getSyscoinGatewayMigrationFinalizeParams(
+                    l2Provider,
+                    tokenMigrationInitiationHash.value as `0x${string}`,
+                    eraNetwork.value.id
+                  ),
+                {
+                  retries: 3,
+                  delay: 10_000,
+                }
+              );
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              if (message.includes("proof is not available") || message.includes("not mined yet")) {
+                setAllowanceStatus.value = "done";
+                approveAllowanceReceipt.value = receipts;
+                return receipts;
+              }
+              throw error;
+            }
+
+            const l1AssetTrackerAddress = (await readContract(wagmiConfig, {
+              chainId: l1ChainId,
+              address: eraNetwork.value.syscoinBridge.bridgehubAddress,
+              abi: SYSCOIN_BRIDGEHUB_ABI,
+              functionName: "chainAssetHandler",
+            })) as Address;
+
+            let switchedToL1 = false;
+            try {
+              await onboardStore.switchNetworkById(l1ChainId, l1Network.name);
+              switchedToL1 = true;
+              setAllowanceStatus.value = "waiting-for-signature";
+              const txFinalizeHash = await writeContract(wagmiConfig, {
+                chainId: l1ChainId,
+                address: l1AssetTrackerAddress,
+                abi: SYSCOIN_L1_ASSET_TRACKER_ABI,
+                functionName: "receiveL1ToGatewayMigrationOnL1",
+                args: [finalizeMigrationParams],
+              });
+
+              if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
+              setAllowanceTransactionHashes.value.push(txFinalizeHash);
+              tokenMigrationFinalizationHash.value = txFinalizeHash;
+              setAllowanceStatus.value = "sending";
+              receipts.push(
+                await retry(
+                  () =>
+                    waitForTransactionReceipt(wagmiConfig, {
+                      chainId: l1ChainId,
+                      hash: txFinalizeHash,
+                      timeout: SYSCOIN_L1_RECEIPT_TIMEOUT,
+                      onReplaced: (replacement) => {
+                        if (preparationIsCurrent(migrationTokenAddress, migrationAssetId)) {
+                          setAllowanceTransactionHashes.value[setAllowanceTransactionHashes.value.length - 1] =
+                            replacement.transaction.hash;
+                          tokenMigrationFinalizationHash.value = replacement.transaction.hash;
+                        }
+                      },
+                    }),
+                  {
+                    retries: 3,
+                    delay: 5_000,
+                  }
+                )
+              );
+            } finally {
+              if (switchedToL1) {
+                await onboardStore.switchNetworkById(eraNetwork.value.id, eraNetwork.value.name).catch(() => undefined);
+              }
+            }
+          }
         }
 
         const migrationRequired = await checkTokenMigrationRequired(migrationAssetId);

@@ -35,6 +35,7 @@ export const SYSCOIN_DEFAULT_L2_PRIORITY_FEE = 5_000_000_000n;
 export const SYSCOIN_L1_RECEIPT_TIMEOUT = 15 * 60_000;
 
 export const SYSCOIN_BRIDGEHUB_ABI = parseAbi([
+  "function chainAssetHandler() view returns (address)",
   "function l2TransactionBaseCost(uint256 chainId, uint256 gasPrice, uint256 l2GasLimit, uint256 l2GasPerPubdataByteLimit) view returns (uint256)",
   "function requestL2TransactionDirect((uint256 chainId, uint256 mintValue, address l2Contract, uint256 l2Value, bytes l2Calldata, uint256 l2GasLimit, uint256 l2GasPerPubdataByteLimit, bytes[] factoryDeps, address refundRecipient) request) payable returns (bytes32 canonicalTxHash)",
   "function requestL2TransactionTwoBridges((uint256 chainId, uint256 mintValue, uint256 l2Value, uint256 l2GasLimit, uint256 l2GasPerPubdataByteLimit, address refundRecipient, address secondBridgeAddress, uint256 secondBridgeValue, bytes secondBridgeCalldata) request) payable returns (bytes32 canonicalTxHash)",
@@ -67,6 +68,10 @@ export const SYSCOIN_L1_NULLIFIER_ABI = parseAbi([
   "function finalizeDeposit((uint256 chainId, uint256 l2BatchNumber, uint256 l2MessageIndex, address l2Sender, uint16 l2TxNumberInBatch, bytes message, bytes32[] merkleProof) finalizeWithdrawalParams)",
 ]);
 
+export const SYSCOIN_L1_ASSET_TRACKER_ABI = parseAbi([
+  "function receiveL1ToGatewayMigrationOnL1((uint256 chainId, uint256 l2BatchNumber, uint256 l2MessageIndex, address l2Sender, uint16 l2TxNumberInBatch, bytes message, bytes32[] merkleProof) finalizeWithdrawalParams)",
+]);
+
 export const SYSCOIN_L1_MESSENGER_ADDRESS = "0x0000000000000000000000000000000000008008";
 export const SYSCOIN_L1_MESSAGE_SENT_ABI = parseAbi([
   "event L1MessageSent(address indexed sender, bytes32 indexed hash, bytes message)",
@@ -95,6 +100,8 @@ export type SyscoinAssetRouterWithdrawalMessage = {
 type SyscoinRpcProvider = {
   send: (method: string, params: unknown[]) => Promise<any>;
 };
+
+type SyscoinLogProofTarget = "l1BatchRoot" | "messageRoot";
 
 export const isSyscoinBridgeNetwork = (network: ZkSyncNetwork): network is SyscoinBridgeNetwork => {
   return !!network.syscoinBridge;
@@ -219,7 +226,8 @@ export const getSyscoinFinalizeWithdrawalParams = async (
   provider: SyscoinRpcProvider,
   withdrawalHash: Hex,
   chainId: number | bigint,
-  withdrawalIndex = 0
+  withdrawalIndex = 0,
+  proofTarget?: SyscoinLogProofTarget
 ): Promise<SyscoinFinalizeWithdrawalParams> => {
   const receipt = await provider.send("eth_getTransactionReceipt", [withdrawalHash]);
   if (!receipt) throw new Error("Withdrawal transaction is not mined yet");
@@ -248,7 +256,10 @@ export const getSyscoinFinalizeWithdrawalParams = async (
   );
   if (l2ToL1LogIndex < 0) throw new Error("Withdrawal L2 to L1 log is not available yet");
 
-  const proof = await provider.send("zks_getL2ToL1LogProof", [withdrawalHash, l2ToL1LogIndex]);
+  const proofParams = proofTarget
+    ? [withdrawalHash, l2ToL1LogIndex, proofTarget]
+    : [withdrawalHash, l2ToL1LogIndex];
+  const proof = await provider.send("zks_getL2ToL1LogProof", proofParams);
   if (!proof) throw new Error("Withdrawal proof is not available yet");
 
   const l2ToL1Log = l2ToL1Logs[l2ToL1LogIndex];
@@ -261,6 +272,16 @@ export const getSyscoinFinalizeWithdrawalParams = async (
     message: l1MessageSentLog.args.message as Hex,
     merkleProof: proof.proof as readonly Hex[],
   };
+};
+
+export const getSyscoinGatewayMigrationFinalizeParams = async (
+  provider: SyscoinRpcProvider,
+  migrationHash: Hex,
+  chainId: number | bigint
+) => {
+  // SYSCOIN: L1AssetTracker verifies this path against MessageRoot, not the
+  // default L1 batch root used by withdrawal finalization.
+  return await getSyscoinFinalizeWithdrawalParams(provider, migrationHash, chainId, 0, "messageRoot");
 };
 
 export const parseSyscoinBaseTokenWithdrawalMessage = (message: Hex) => {
