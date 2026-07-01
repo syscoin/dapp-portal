@@ -27,8 +27,54 @@ import type { Address } from "viem";
 // SYSCOIN: v31 NativeTokenVault uses zero bytes32 as the "not registered"
 // sentinel for asset-id withdrawals.
 const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
+const TOKEN_MIGRATION_INITIATION_STORAGE_PREFIX = "zksys-token-migration-initiation";
 const isL2BaseTokenAddress = (address: string | undefined) => {
   return address?.toLowerCase() === L2_BASE_TOKEN_ADDRESS.toLowerCase();
+};
+const isTransactionHash = (value: unknown): value is Hash => {
+  return typeof value === "string" && /^0x[0-9a-fA-F]{64}$/.test(value);
+};
+
+type StoredTokenMigrationInitiation = {
+  hash: Hash;
+  createdAt: number;
+};
+
+const getTokenMigrationInitiationStorageKey = (chainId: number, account: string, assetId: string) => {
+  return [
+    TOKEN_MIGRATION_INITIATION_STORAGE_PREFIX,
+    chainId.toString(),
+    account.toLowerCase(),
+    assetId.toLowerCase(),
+  ].join(":");
+};
+
+const readStoredTokenMigrationInitiationHash = (chainId: number, account: string | undefined, assetId: string) => {
+  if (typeof window === "undefined" || !account) return undefined;
+  try {
+    const rawValue = window.localStorage.getItem(getTokenMigrationInitiationStorageKey(chainId, account, assetId));
+    if (!rawValue) return undefined;
+    const parsedValue = JSON.parse(rawValue) as Partial<StoredTokenMigrationInitiation>;
+    return isTransactionHash(parsedValue.hash) ? parsedValue.hash : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const writeStoredTokenMigrationInitiationHash = (
+  chainId: number,
+  account: string | undefined,
+  assetId: string,
+  hash: Hash
+) => {
+  if (typeof window === "undefined" || !account) return;
+  const value: StoredTokenMigrationInitiation = { hash, createdAt: Date.now() };
+  window.localStorage.setItem(getTokenMigrationInitiationStorageKey(chainId, account, assetId), JSON.stringify(value));
+};
+
+const clearStoredTokenMigrationInitiationHash = (chainId: number, account: string | undefined, assetId: string) => {
+  if (typeof window === "undefined" || !account) return;
+  window.localStorage.removeItem(getTokenMigrationInitiationStorageKey(chainId, account, assetId));
 };
 
 export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount: Ref<bigint>) => {
@@ -65,6 +111,56 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
     approveAllowanceReceipt.value = undefined;
     approveAllowanceError.value = undefined;
     approveAllowanceInProgress.value = false;
+  };
+
+  const trackTokenMigrationInitiationHash = (hash: Hash, migrationAssetId: string, accountAddress?: string) => {
+    tokenMigrationInitiationHash.value = hash;
+    tokenMigrationInitiated.value = true;
+    if (!setAllowanceTransactionHashes.value.includes(hash)) {
+      setAllowanceTransactionHashes.value.push(hash);
+    }
+    writeStoredTokenMigrationInitiationHash(eraNetwork.value.id, accountAddress, migrationAssetId, hash);
+  };
+
+  const clearTokenMigrationInitiationHash = (migrationAssetId: string, accountAddress?: string) => {
+    const hash = tokenMigrationInitiationHash.value;
+    tokenMigrationInitiationHash.value = undefined;
+    tokenMigrationInitiated.value = false;
+    if (hash) {
+      setAllowanceTransactionHashes.value = setAllowanceTransactionHashes.value.filter((value) => value !== hash);
+    }
+    clearStoredTokenMigrationInitiationHash(eraNetwork.value.id, accountAddress, migrationAssetId);
+  };
+
+  const restoreTokenMigrationInitiationHash = (migrationAssetId: string, accountAddress?: string) => {
+    const storedHash = readStoredTokenMigrationInitiationHash(eraNetwork.value.id, accountAddress, migrationAssetId);
+    if (storedHash) {
+      trackTokenMigrationInitiationHash(storedHash, migrationAssetId, accountAddress);
+    }
+  };
+
+  const validateTokenMigrationInitiationHash = async (
+    provider: { send: (method: string, params: unknown[]) => Promise<any> },
+    hash: Hash,
+    migrationAssetId: string
+  ) => {
+    const receipt = await provider.send("eth_getTransactionReceipt", [hash]);
+    // A just-submitted tx can be pending after refresh; keep the hash and let
+    // proof retrieval report "not mined yet" instead of starting a duplicate tx.
+    if (!receipt) return true;
+    if (receipt.status !== "0x1") return false;
+    if (!receipt.to || receipt.to.toLowerCase() !== L2_ASSET_TRACKER_ADDRESS.toLowerCase()) return false;
+
+    const emittedAssetMigrationEvent = (receipt.logs ?? []).some(
+      (log: { address?: string; topics?: string[] }) =>
+        log.address?.toLowerCase() === L2_ASSET_TRACKER_ADDRESS.toLowerCase() &&
+        log.topics?.[1]?.toLowerCase() === migrationAssetId.toLowerCase()
+    );
+    const emittedSettlementMessage = (receipt.l2ToL1Logs ?? []).some(
+      (log: { key?: string }) => log.key?.toLowerCase() === L2_ASSET_TRACKER_ADDRESS.toLowerCase()
+    );
+
+    return emittedAssetMigrationEvent && emittedSettlementMessage;
   };
 
   const currentSettlementLayerChainId = async () => {
@@ -166,11 +262,17 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
         usesAssetIdWithdrawal.value = true;
         isNativeToken.value = needsRegistration || originChainId === BigInt(eraNetwork.value.id);
 
+        const accountAddress = getAccount(wagmiConfig).address;
+        if (migrationRequired) {
+          restoreTokenMigrationInitiationHash(checkedAssetId, accountAddress);
+        } else {
+          clearStoredTokenMigrationInitiationHash(eraNetwork.value.id, accountAddress, checkedAssetId);
+        }
+
         if (!isNativeToken.value) {
           return;
         }
 
-        const accountAddress = getAccount(wagmiConfig).address;
         const allowance = (await readContract(wagmiConfig, {
           chainId: eraNetwork.value.id,
           address: tokenAddress.value as Address,
@@ -296,6 +398,21 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
       const migrationTokenAddress = tokenAddress.value;
       if (tokenMigrationRequired.value && migrationAssetId) {
         if (!tokenMigrationInitiationHash.value) {
+          restoreTokenMigrationInitiationHash(migrationAssetId, accountAddress);
+        }
+        if (tokenMigrationInitiationHash.value) {
+          const l2Provider = await providerStore.requestProvider();
+          const migrationInitiationIsValid = await validateTokenMigrationInitiationHash(
+            l2Provider,
+            tokenMigrationInitiationHash.value,
+            migrationAssetId
+          );
+          if (!migrationInitiationIsValid) {
+            clearTokenMigrationInitiationHash(migrationAssetId, accountAddress);
+          }
+        }
+
+        if (!tokenMigrationInitiationHash.value) {
           // SYSCOIN: v31 Gateway-settled chains require each asset's balance
           // accounting to be migrated before withdrawals / interop can leave
           // the chain. This first leg emits the L2->settlement-layer message.
@@ -309,8 +426,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
           });
 
           if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
-          setAllowanceTransactionHashes.value.push(txMigrationHash);
-          tokenMigrationInitiationHash.value = txMigrationHash;
+          trackTokenMigrationInitiationHash(txMigrationHash, migrationAssetId, accountAddress);
           setAllowanceStatus.value = "sending";
           receipts.push(
             await retry(
@@ -320,9 +436,13 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
                   hash: txMigrationHash,
                   onReplaced: (replacement) => {
                     if (preparationIsCurrent(migrationTokenAddress, migrationAssetId)) {
+                      if (replacement.reason === "cancelled") {
+                        clearTokenMigrationInitiationHash(migrationAssetId, accountAddress);
+                        throw new Error("L2 Gateway migration initiation transaction was cancelled");
+                      }
                       setAllowanceTransactionHashes.value[setAllowanceTransactionHashes.value.length - 1] =
                         replacement.transaction.hash;
-                      tokenMigrationInitiationHash.value = replacement.transaction.hash;
+                      trackTokenMigrationInitiationHash(replacement.transaction.hash, migrationAssetId, accountAddress);
                     }
                   },
                 }),
@@ -433,6 +553,9 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
         const migrationRequired = await checkTokenMigrationRequired(migrationAssetId);
         if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
         tokenMigrationRequired.value = migrationRequired;
+        if (!migrationRequired) {
+          clearStoredTokenMigrationInitiationHash(eraNetwork.value.id, accountAddress, migrationAssetId);
+        }
         if (migrationRequired) {
           setAllowanceStatus.value = "done";
           approveAllowanceReceipt.value = receipts;
