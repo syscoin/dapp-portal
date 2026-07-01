@@ -124,6 +124,7 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
                 amount: BigInt(transaction.amount.toString()),
               })
             : buildSyscoinWithdrawTransaction({
+                assetId: transaction.assetId as `0x${string}` | null,
                 l1Receiver: transaction.to as `0x${string}`,
                 l2Token: transaction.tokenAddress as `0x${string}`,
                 amount: BigInt(transaction.amount.toString()),

@@ -17,6 +17,7 @@ import {
   buildSyscoinErc20SecondBridgeCalldata,
   buildSyscoinErc20TransferData,
   buildSyscoinErc20WithdrawData,
+  buildSyscoinGatewayMigrationTransaction,
   buildSyscoinL2BaseTokenWithdrawData,
   buildSyscoinNativeTokenWithdrawTransaction,
   buildSyscoinTsysDepositRequest,
@@ -153,8 +154,13 @@ describe("syscoin bridge encoding", () => {
   it("builds L2 withdrawal calldata for TSYS and ERC20", () => {
     assert.equal(buildSyscoinL2BaseTokenWithdrawData(receiver).slice(0, 10), toFunctionSelector("withdraw(address)"));
     assert.equal(
-      buildSyscoinErc20WithdrawData(receiver, l2Token, amount).slice(0, 10),
-      toFunctionSelector("withdraw(address,address,uint256)")
+      buildSyscoinErc20WithdrawData({
+        assetId,
+        l1Receiver: receiver,
+        l2Token,
+        amount,
+      }).slice(0, 10),
+      toFunctionSelector("withdraw(bytes32,bytes)")
     );
   });
 
@@ -194,13 +200,15 @@ describe("syscoin bridge encoding", () => {
     assert.equal(baseTokenTx.data.slice(0, 10), toFunctionSelector("withdraw(address)"));
 
     const erc20Tx = buildSyscoinWithdrawTransaction({
+      assetId,
       l1Receiver: receiver,
       l2Token,
       amount,
     });
     assert.equal(erc20Tx.to, "0x0000000000000000000000000000000000010003");
     assert.equal(erc20Tx.value, 0n);
-    assert.equal(erc20Tx.data.slice(0, 10), toFunctionSelector("withdraw(address,address,uint256)"));
+    assert.equal(erc20Tx.data.slice(0, 10), toFunctionSelector("withdraw(bytes32,bytes)"));
+    assert.ok(erc20Tx.data.includes(assetId.slice(2)));
   });
 
   it("builds native Syscoin token withdrawal transaction requests", () => {
@@ -215,6 +223,15 @@ describe("syscoin bridge encoding", () => {
     assert.equal(nativeTokenTx.value, 0n);
     assert.equal(nativeTokenTx.data.slice(0, 10), toFunctionSelector("withdraw(bytes32,bytes)"));
     assert.ok(nativeTokenTx.data.includes(assetId.slice(2)));
+  });
+
+  it("builds Gateway migration transaction requests", () => {
+    const migrationTx = buildSyscoinGatewayMigrationTransaction(assetId);
+
+    assert.equal(migrationTx.to, "0x000000000000000000000000000000000001000F");
+    assert.equal(migrationTx.value, 0n);
+    assert.equal(migrationTx.data.slice(0, 10), toFunctionSelector("initiateL1ToGatewayMigrationOnL2(bytes32)"));
+    assert.ok(migrationTx.data.includes(assetId.slice(2)));
   });
 
   it("derives OS withdrawal finalization params from receipt and log proof", async () => {

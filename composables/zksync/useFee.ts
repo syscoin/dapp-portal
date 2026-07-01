@@ -162,6 +162,7 @@ export default (
                     amount: BigInt(params!.amount),
                   })
                 : buildSyscoinWithdrawTransaction({
+                    assetId: params!.assetId as `0x${string}` | null,
                     l1Receiver: params!.to as `0x${string}`,
                     l2Token: params!.tokenAddress as `0x${string}`,
                     amount: BigInt(params!.amount),
