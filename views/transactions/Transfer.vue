@@ -675,7 +675,9 @@ watch(
   [
     () => selectedToken.value?.address,
     () => tokenBalance.value?.toString(),
+    assetId,
     amountToTransferIsApproved,
+    showWithdrawalAllowanceProcess,
     totalComputeAmount,
   ],
   () => {
