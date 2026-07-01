@@ -8,6 +8,7 @@ import { EIP712_TX_TYPE } from "zksync-ethers/build/utils";
 import { isCustomNode } from "@/data/networks";
 import { L2_BASE_TOKEN_ADDRESS } from "@/utils/constants";
 import {
+  buildSyscoinNativeTokenWithdrawTransaction,
   buildSyscoinTransferTransaction,
   buildSyscoinWithdrawTransaction,
   getSyscoinL2FeeOverrides,
@@ -26,6 +27,10 @@ type TransactionParams = {
   to: string;
   tokenAddress: string;
   amount: BigNumberish;
+  isNativeToken?: boolean | null;
+  // SYSCOIN: separates v31 asset-id withdrawal calldata from approval gating.
+  usesAssetIdWithdrawal?: boolean;
+  assetId?: string | null;
   bridgeAddress?: string;
 };
 
@@ -108,6 +113,13 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
           transaction.type === "transfer"
             ? buildSyscoinTransferTransaction({
                 recipient: transaction.to as `0x${string}`,
+                l2Token: transaction.tokenAddress as `0x${string}`,
+                amount: BigInt(transaction.amount.toString()),
+              })
+            : transaction.usesAssetIdWithdrawal && transaction.assetId
+            ? buildSyscoinNativeTokenWithdrawTransaction({
+                assetId: transaction.assetId as `0x${string}`,
+                l1Receiver: transaction.to as `0x${string}`,
                 l2Token: transaction.tokenAddress as `0x${string}`,
                 amount: BigInt(transaction.amount.toString()),
               })

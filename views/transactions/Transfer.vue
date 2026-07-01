@@ -53,7 +53,7 @@
           :tokens="availableTokens"
           :balances="availableBalances"
           :max-amount="maxAmount"
-          :approve-required="!!isNativeToken && !amountToTransferIsApproved"
+          :approve-required="requiresNativeTokenApproval"
           :loading="tokensRequestInProgress || balanceInProgress || feeLoading"
         >
           <template v-if="type === 'withdrawal' && account.address" #token-dropdown-bottom>
@@ -219,8 +219,9 @@
         <CommonHeightTransition
           v-if="step === 'form'"
           :opened="
+            type === 'withdrawal' &&
             !!isNativeToken &&
-            (showAllowanceProcess || !amountToTransferIsApproved || setAllowanceTransactionHashes.length > 0)
+            (showWithdrawalAllowanceProcess || !amountToTransferIsApproved || setAllowanceTransactionHashes.length > 0)
           "
         >
           <AllowancePanel
@@ -240,7 +241,7 @@
         <TransactionFooter>
           <template #after-checks>
             <template v-if="step === 'form'">
-              <template v-if="showAllowanceProcess">
+              <template v-if="showWithdrawalAllowanceProcess">
                 <CommonButton
                   type="submit"
                   variant="primary"
@@ -376,8 +377,17 @@ const isOfficialSyscoinL2Token = (token: Token | TokenAmount) => {
     syscoinTanenbaumTokens.some((officialToken) => officialToken.address.toLowerCase() === token.address.toLowerCase())
   );
 };
-const isWithdrawableToken = (token: Token | TokenAmount) => {
+const isConfiguredWithdrawableToken = (token: Token | TokenAmount) => {
   return !!token.l1Address || isOfficialSyscoinL2Token(token);
+};
+// SYSCOIN: v31 can withdraw positive-balance L2 tokens via NativeTokenVault
+// asset ids even before they have curated L1 metadata in the registry.
+const isPositiveBalance = (token: TokenAmount) => {
+  try {
+    return BigInt(token.amount) > 0n;
+  } catch {
+    return false;
+  }
 };
 
 const availableTokens = computed(() => {
@@ -387,7 +397,7 @@ const availableTokens = computed(() => {
       Object.values(tokens.value),
       AddressChainType.L2,
       eraNetwork.value.l1Network?.id
-    ).filter(isWithdrawableToken);
+    ).filter(isConfiguredWithdrawableToken);
   }
   return getTokensWithCustomBridgeTokens(
     Object.values(tokens.value),
@@ -398,7 +408,10 @@ const availableTokens = computed(() => {
 const availableBalances = computed(() => {
   if (props.type === "withdrawal") {
     if (!tokens.value) return [];
-    return balance.value.filter(isWithdrawableToken);
+    return balance.value.filter(
+      (token) =>
+        isConfiguredWithdrawableToken(token) || (isSyscoinBridgeNetwork(eraNetwork.value) && isPositiveBalance(token))
+    );
   }
   return balance.value;
 });
@@ -578,6 +591,7 @@ const withdrawalManualFinalizationRequired = computed(() => {
 
 const {
   isNativeToken,
+  usesAssetIdWithdrawal,
   assetId,
   allowanceCheckInProgress,
   amountToTransferIsApproved,
@@ -596,12 +610,22 @@ const setTokenAllowance = async () => {
   await fetchBalances(true);
 };
 
+// SYSCOIN: asset-id routing is separate from NativeTokenVault approval. Only
+// current-chain-native/unregistered withdrawals need the approval step.
+const requiresNativeTokenApproval = computed(() => {
+  return props.type === "withdrawal" && !!isNativeToken.value && !amountToTransferIsApproved.value;
+});
+// SYSCOIN: the NativeTokenVault registration/approval panel is withdrawal-only;
+// regular L2 transfers never consume this allowance.
+const showWithdrawalAllowanceProcess = computed(() => {
+  return props.type === "withdrawal" && showAllowanceProcess.value;
+});
 const feeLoading = computed(() => feeInProgress.value || (!fee.value && balanceInProgress.value));
 const estimate = async () => {
   if (allowanceCheckInProgress.value) {
     return;
   }
-  if (isNativeToken.value && !amountToTransferIsApproved.value) {
+  if (requiresNativeTokenApproval.value) {
     return;
   }
 
@@ -621,6 +645,7 @@ const estimate = async () => {
     to: transaction.value.to.address,
     tokenAddress: selectedToken.value.address,
     isNativeToken: isNativeToken.value,
+    usesAssetIdWithdrawal: props.type === "withdrawal" && usesAssetIdWithdrawal.value,
     assetId: assetId.value,
     amount: totalComputeAmount.value.toString(),
   });
@@ -681,7 +706,7 @@ const continueButtonDisabled = computed(() => {
   }
   if (feeLoading.value || !fee.value) return true;
   if (allowanceCheckInProgress.value) return true;
-  if (isNativeToken.value && !amountToTransferIsApproved.value) {
+  if (requiresNativeTokenApproval.value) {
     return true;
   }
   return false;
@@ -729,6 +754,9 @@ const makeTransaction = async () => {
       to: transaction.value!.to.address,
       tokenAddress: transaction.value!.token.address,
       amount: transaction.value!.token.amount,
+      isNativeToken: isNativeToken.value,
+      usesAssetIdWithdrawal: props.type === "withdrawal" && usesAssetIdWithdrawal.value,
+      assetId: assetId.value,
       bridgeAddress: transaction.value!.token.l2BridgeAddress,
     },
     {

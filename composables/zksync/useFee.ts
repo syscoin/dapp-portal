@@ -6,6 +6,7 @@ import { EIP712_TX_TYPE } from "zksync-ethers/build/utils";
 import { wagmiConfig } from "@/data/wagmi";
 import {
   SYSCOIN_DEFAULT_L2_TRANSFER_GAS_LIMIT,
+  buildSyscoinNativeTokenWithdrawTransaction,
   buildSyscoinTransferTransaction,
   buildSyscoinWithdrawTransaction,
   getSyscoinL2FeeOverrides,
@@ -24,6 +25,9 @@ export type FeeEstimationParams = {
   to: string;
   tokenAddress: string;
   isNativeToken: boolean | null;
+  // SYSCOIN: v31 withdrawals may route through L2AssetRouter's asset-id
+  // overload without necessarily requiring NativeTokenVault allowance.
+  usesAssetIdWithdrawal?: boolean;
   assetId?: string | null;
   amount: string;
 };
@@ -131,7 +135,7 @@ export default (
         return;
       }
 
-      if (params.isNativeToken && +params!.amount <= 0) {
+      if (BigInt(params.amount) <= 0n) {
         resetFee();
         return;
       }
@@ -147,6 +151,13 @@ export default (
               params!.type === "transfer"
                 ? buildSyscoinTransferTransaction({
                     recipient: params!.to as `0x${string}`,
+                    l2Token: params!.tokenAddress as `0x${string}`,
+                    amount: BigInt(params!.amount),
+                  })
+                : params!.usesAssetIdWithdrawal && params!.assetId
+                ? buildSyscoinNativeTokenWithdrawTransaction({
+                    assetId: params!.assetId as `0x${string}`,
+                    l1Receiver: params!.to as `0x${string}`,
                     l2Token: params!.tokenAddress as `0x${string}`,
                     amount: BigInt(params!.amount),
                   })

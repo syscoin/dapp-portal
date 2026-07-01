@@ -18,6 +18,7 @@ import {
   buildSyscoinErc20TransferData,
   buildSyscoinErc20WithdrawData,
   buildSyscoinL2BaseTokenWithdrawData,
+  buildSyscoinNativeTokenWithdrawTransaction,
   buildSyscoinTsysDepositRequest,
   buildSyscoinTransferTransaction,
   buildSyscoinWithdrawTransaction,
@@ -36,6 +37,7 @@ const l2Token = "0x2222222222222222222222222222222222222222";
 const receiver = "0x3333333333333333333333333333333333333333";
 const amount = 1_000_000_000_000_000_000n;
 const baseCost = 42_000_000_000_000n;
+const assetId = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 describe("syscoin bridge encoding", () => {
   it("prefills the Tanenbaum faucet only for valid wallet addresses", () => {
@@ -201,6 +203,20 @@ describe("syscoin bridge encoding", () => {
     assert.equal(erc20Tx.data.slice(0, 10), toFunctionSelector("withdraw(address,address,uint256)"));
   });
 
+  it("builds native Syscoin token withdrawal transaction requests", () => {
+    const nativeTokenTx = buildSyscoinNativeTokenWithdrawTransaction({
+      assetId,
+      l1Receiver: receiver,
+      l2Token,
+      amount,
+    });
+
+    assert.equal(nativeTokenTx.to, "0x0000000000000000000000000000000000010003");
+    assert.equal(nativeTokenTx.value, 0n);
+    assert.equal(nativeTokenTx.data.slice(0, 10), toFunctionSelector("withdraw(bytes32,bytes)"));
+    assert.ok(nativeTokenTx.data.includes(assetId.slice(2)));
+  });
+
   it("derives OS withdrawal finalization params from receipt and log proof", async () => {
     const withdrawalHash = "0xeb2ed53ace69581b2ea88d5cbd850e5b9a0bb897b521c4feda88a50de4d2f30b";
     const message =
@@ -269,7 +285,6 @@ describe("syscoin bridge encoding", () => {
 
   it("parses asset-router withdrawal messages", () => {
     const originChainId = 5700n;
-    const assetId = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const originalCaller = "0x4444444444444444444444444444444444444444";
     const erc20Metadata = "0x1234";
     const transferData = encodeAbiParameters(
