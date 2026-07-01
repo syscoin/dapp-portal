@@ -44,7 +44,12 @@ export const SYSCOIN_L2_BASE_TOKEN_ABI = parseAbi(["function withdraw(address l1
 
 export const SYSCOIN_L2_ASSET_ROUTER_ABI = parseAbi([
   "function withdraw(address l1Receiver, address l2Token, uint256 amount)",
+  "function withdraw(bytes32 assetId, bytes assetData) returns (bytes32)",
   "function l2TokenAddress(address l1Token) view returns (address)",
+]);
+
+const SYSCOIN_L2_ASSET_ROUTER_NATIVE_WITHDRAW_ABI = parseAbi([
+  "function withdraw(bytes32 assetId, bytes assetData) returns (bytes32)",
 ]);
 
 export const SYSCOIN_ERC20_ABI = parseAbi([
@@ -157,6 +162,28 @@ export const buildSyscoinWithdrawTransaction = (params: { l1Receiver: Address; l
       ? buildSyscoinL2BaseTokenWithdrawData(params.l1Receiver)
       : buildSyscoinErc20WithdrawData(params.l1Receiver, params.l2Token, params.amount),
     value: isBaseToken ? params.amount : 0n,
+  };
+};
+
+export const buildSyscoinNativeTokenWithdrawTransaction = (params: {
+  assetId: Hex;
+  l1Receiver: Address;
+  l2Token: Address;
+  amount: bigint;
+}) => {
+  const assetData = encodeAbiParameters(
+    [{ type: "uint256" }, { type: "address" }, { type: "address" }],
+    [params.amount, params.l1Receiver, params.l2Token]
+  );
+
+  return {
+    to: L2_ASSET_ROUTER_ADDRESS as Address,
+    data: encodeFunctionData({
+      abi: SYSCOIN_L2_ASSET_ROUTER_NATIVE_WITHDRAW_ABI,
+      functionName: "withdraw",
+      args: [params.assetId, assetData],
+    }),
+    value: 0n,
   };
 };
 

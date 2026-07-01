@@ -9,6 +9,8 @@ import { useSentryLogger } from "../useSentryLogger";
 import type { Hash } from "@/types";
 import type { Address } from "viem";
 
+const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
+
 export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount: Ref<bigint>) => {
   const providerStore = useZkSyncProviderStore();
   const { eraNetwork } = storeToRefs(providerStore);
@@ -17,6 +19,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
   const isNativeToken = ref<boolean | null>(null);
   const allowanceCheckInProgress = ref<boolean>(false);
   const assetId = ref<null | string>(null);
+  const tokenRegistrationRequired = ref(false);
   const approvedAllowance = ref<null | bigint>(null);
   let allowanceCheckNonce = 0;
 
@@ -25,6 +28,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
     async () => {
       const nonce = ++allowanceCheckNonce;
       assetId.value = null;
+      tokenRegistrationRequired.value = false;
       approvedAllowance.value = null;
 
       if (!tokenAddress.value) {
@@ -39,30 +43,29 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
       }
       allowanceCheckInProgress.value = true;
       try {
-        const checkedAssetId = (await readContract(wagmiConfig, {
+        let checkedAssetId = (await readContract(wagmiConfig, {
           address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
           abi: L2_NATIVE_TOKEN_VAULT_ABI,
           functionName: "assetId",
           args: [tokenAddress.value],
           chainId: eraNetwork.value.id,
         })) as string;
-        const originChainId: bigint = (await readContract(wagmiConfig, {
-          address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
-          abi: L2_NATIVE_TOKEN_VAULT_ABI,
-          functionName: "originChainId",
-          args: [checkedAssetId],
-          chainId: eraNetwork.value.id,
-        })) as bigint;
-
+        const needsRegistration = checkedAssetId === ZERO_HASH;
+        if (needsRegistration) {
+          checkedAssetId = (await readContract(wagmiConfig, {
+            address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
+            abi: L2_NATIVE_TOKEN_VAULT_ABI,
+            functionName: "ensureTokenIsRegistered",
+            args: [tokenAddress.value],
+            chainId: eraNetwork.value.id,
+          })) as string;
+        }
         if (nonce !== allowanceCheckNonce) return;
         assetId.value = checkedAssetId;
-        isNativeToken.value = BigInt(eraNetwork.value.id) === originChainId;
-
-        if (!isNativeToken.value) {
-          // SYSCOIN: L1-origin bridge tokens can have vault metadata before an
-          // L2 ERC20 contract exists, so only native tokens need allowance().
-          return;
-        }
+        tokenRegistrationRequired.value = needsRegistration;
+        // SYSCOIN: v31 withdrawals use the NativeTokenVault asset-id path for
+        // non-base ERC20s, regardless of whether the origin chain is L1 or L2.
+        isNativeToken.value = true;
 
         const accountAddress = getAccount(wagmiConfig).address;
         const allowance = (await readContract(wagmiConfig, {
@@ -94,6 +97,9 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
   );
 
   const amountToTransferIsApproved = computed(() => {
+    if (tokenRegistrationRequired.value) {
+      return false;
+    }
     if (approvedAllowance.value == null || amount.value == null) {
       return false;
     }
@@ -129,6 +135,45 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
       try {
         setAllowanceStatus.value = "processing";
         const accountAddress = getAccount(wagmiConfig).address;
+        const receipts = [];
+
+        if (tokenRegistrationRequired.value) {
+          setAllowanceStatus.value = "waiting-for-signature";
+          const txRegisterHash = await writeContract(wagmiConfig, {
+            chainId: eraNetwork.value.id,
+            address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
+            abi: L2_NATIVE_TOKEN_VAULT_ABI,
+            functionName: "ensureTokenIsRegistered",
+            args: [tokenAddress.value as Address],
+          });
+
+          setAllowanceTransactionHashes.value.push(txRegisterHash);
+          setAllowanceStatus.value = "sending";
+          receipts.push(
+            await retry(
+              () =>
+                waitForTransactionReceipt(wagmiConfig, {
+                  chainId: eraNetwork.value.id,
+                  hash: txRegisterHash,
+                  onReplaced: (replacement) => {
+                    setAllowanceTransactionHashes.value[0] = replacement.transaction.hash;
+                  },
+                }),
+              {
+                retries: 3,
+                delay: 5_000,
+              }
+            )
+          );
+          tokenRegistrationRequired.value = false;
+          assetId.value = (await readContract(wagmiConfig, {
+            address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
+            abi: L2_NATIVE_TOKEN_VAULT_ABI,
+            functionName: "assetId",
+            args: [tokenAddress.value],
+            chainId: eraNetwork.value.id,
+          })) as string;
+        }
 
         setAllowanceStatus.value = "waiting-for-signature";
         const txApproveHash = await writeContract(wagmiConfig, {
@@ -142,19 +187,22 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
         setAllowanceTransactionHashes.value.push(txApproveHash);
         setAllowanceStatus.value = "sending";
 
-        const receipt = await retry(
-          () =>
-            waitForTransactionReceipt(wagmiConfig, {
-              chainId: eraNetwork.value.id,
-              hash: txApproveHash,
-              onReplaced: (replacement) => {
-                setAllowanceTransactionHashes.value[0] = replacement.transaction.hash;
-              },
-            }),
-          {
-            retries: 3,
-            delay: 5_000,
-          }
+        receipts.push(
+          await retry(
+            () =>
+              waitForTransactionReceipt(wagmiConfig, {
+                chainId: eraNetwork.value.id,
+                hash: txApproveHash,
+                onReplaced: (replacement) => {
+                  setAllowanceTransactionHashes.value[setAllowanceTransactionHashes.value.length - 1] =
+                    replacement.transaction.hash;
+                },
+              }),
+            {
+              retries: 3,
+              delay: 5_000,
+            }
+          )
         );
 
         approvedAllowance.value = (await readContract(wagmiConfig, {
@@ -166,7 +214,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
         })) as bigint;
 
         setAllowanceStatus.value = "done";
-        return [receipt];
+        return receipts;
       } catch (err) {
         setAllowanceStatus.value = "not-started";
         captureException({
@@ -182,6 +230,9 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
   );
 
   const showAllowanceProcess = computed(() => {
+    if (isNativeToken.value && tokenRegistrationRequired.value && amount.value > 0) {
+      return true;
+    }
     if (
       isNativeToken.value &&
       approvedAllowance.value != null &&

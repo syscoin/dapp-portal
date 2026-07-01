@@ -376,8 +376,15 @@ const isOfficialSyscoinL2Token = (token: Token | TokenAmount) => {
     syscoinTanenbaumTokens.some((officialToken) => officialToken.address.toLowerCase() === token.address.toLowerCase())
   );
 };
-const isWithdrawableToken = (token: Token | TokenAmount) => {
+const isConfiguredWithdrawableToken = (token: Token | TokenAmount) => {
   return !!token.l1Address || isOfficialSyscoinL2Token(token);
+};
+const isPositiveBalance = (token: TokenAmount) => {
+  try {
+    return BigInt(token.amount) > 0n;
+  } catch {
+    return false;
+  }
 };
 
 const availableTokens = computed(() => {
@@ -387,7 +394,7 @@ const availableTokens = computed(() => {
       Object.values(tokens.value),
       AddressChainType.L2,
       eraNetwork.value.l1Network?.id
-    ).filter(isWithdrawableToken);
+    ).filter(isConfiguredWithdrawableToken);
   }
   return getTokensWithCustomBridgeTokens(
     Object.values(tokens.value),
@@ -398,7 +405,7 @@ const availableTokens = computed(() => {
 const availableBalances = computed(() => {
   if (props.type === "withdrawal") {
     if (!tokens.value) return [];
-    return balance.value.filter(isWithdrawableToken);
+    return balance.value.filter((token) => isConfiguredWithdrawableToken(token) || isPositiveBalance(token));
   }
   return balance.value;
 });
@@ -729,6 +736,8 @@ const makeTransaction = async () => {
       to: transaction.value!.to.address,
       tokenAddress: transaction.value!.token.address,
       amount: transaction.value!.token.amount,
+      isNativeToken: isNativeToken.value,
+      assetId: assetId.value,
       bridgeAddress: transaction.value!.token.l2BridgeAddress,
     },
     {
