@@ -323,6 +323,8 @@ import useFee from "@/composables/zksync/useFee";
 import useTransaction, { isWithdrawalManualFinalizationRequired } from "@/composables/zksync/useTransaction";
 import { customBridgeTokens } from "@/data/customBridgeTokens";
 import { isCustomNode } from "@/data/networks";
+import { syscoinTanenbaumTokens } from "@/data/syscoin";
+import { isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
 import TransferSubmitted from "@/views/transactions/TransferSubmitted.vue";
 import WithdrawalSubmitted from "@/views/transactions/WithdrawalSubmitted.vue";
 
@@ -368,6 +370,16 @@ const fromNetworkSelected = (networkKey?: string) => {
 const step = ref<"form" | "withdrawal-finalization-warning" | "confirm" | "submitted">("form");
 const destination = computed(() => (props.type === "transfer" ? destinations.value.era : destinations.value.ethereum));
 
+const isOfficialSyscoinL2Token = (token: Token | TokenAmount) => {
+  return (
+    isSyscoinBridgeNetwork(eraNetwork.value) &&
+    syscoinTanenbaumTokens.some((officialToken) => officialToken.address.toLowerCase() === token.address.toLowerCase())
+  );
+};
+const isWithdrawableToken = (token: Token | TokenAmount) => {
+  return !!token.l1Address || isOfficialSyscoinL2Token(token);
+};
+
 const availableTokens = computed(() => {
   if (!tokens.value) return [];
   if (props.type === "withdrawal") {
@@ -375,7 +387,7 @@ const availableTokens = computed(() => {
       Object.values(tokens.value),
       AddressChainType.L2,
       eraNetwork.value.l1Network?.id
-    ).filter((e) => e.l1Address);
+    ).filter(isWithdrawableToken);
   }
   return getTokensWithCustomBridgeTokens(
     Object.values(tokens.value),
@@ -386,7 +398,7 @@ const availableTokens = computed(() => {
 const availableBalances = computed(() => {
   if (props.type === "withdrawal") {
     if (!tokens.value) return [];
-    return balance.value.filter((e) => e.l1Address);
+    return balance.value.filter(isWithdrawableToken);
   }
   return balance.value;
 });

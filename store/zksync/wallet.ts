@@ -163,7 +163,22 @@ export const useZkSyncWalletStore = defineStore("zkSyncWallet", () => {
       amount: balance.amount,
     }));
 
-    return [...nativeBalance, ...mappedBlockscoutBalances];
+    const officialRpcBalances = await Promise.all(
+      registry.l2Tokens
+        .filter((token) => token.address.toUpperCase() !== L2_BASE_TOKEN_ADDRESS.toUpperCase())
+        .map(async (token) => ({
+          ...token,
+          amount: (await provider.getBalance(accountAddress, undefined, token.address)).toString(),
+        }))
+    );
+    const balancesByAddress = new Map(
+      [...nativeBalance, ...mappedBlockscoutBalances, ...officialRpcBalances].map((balance) => [
+        balance.address.toLowerCase(),
+        balance,
+      ])
+    );
+
+    return Array.from(balancesByAddress.values());
   };
   const {
     result: balancesResult,
