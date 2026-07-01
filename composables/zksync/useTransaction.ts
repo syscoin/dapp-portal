@@ -34,6 +34,10 @@ type TransactionParams = {
   bridgeAddress?: string;
 };
 
+const isL2BaseTokenAddress = (address: string | undefined) => {
+  return address?.toLowerCase() === L2_BASE_TOKEN_ADDRESS.toLowerCase();
+};
+
 export const isWithdrawalManualFinalizationRequired = (_token: TokenAmount, l1NetworkId: number) => {
   return l1NetworkId === 1 || isCustomNode;
 };
@@ -151,7 +155,7 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
       const provider = await getProvider();
       const getRequiredBridgeAddress = async () => {
         if (transaction.bridgeAddress) return transaction.bridgeAddress;
-        if (transaction.tokenAddress === L2_BASE_TOKEN_ADDRESS) return undefined;
+        if (isL2BaseTokenAddress(transaction.tokenAddress)) return undefined;
         const bridgeAddresses = await retrieveBridgeAddresses();
         return bridgeAddresses.sharedL2;
       };

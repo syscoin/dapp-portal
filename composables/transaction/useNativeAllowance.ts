@@ -27,6 +27,9 @@ import type { Address } from "viem";
 // SYSCOIN: v31 NativeTokenVault uses zero bytes32 as the "not registered"
 // sentinel for asset-id withdrawals.
 const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
+const isL2BaseTokenAddress = (address: string | undefined) => {
+  return address?.toLowerCase() === L2_BASE_TOKEN_ADDRESS.toLowerCase();
+};
 
 export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount: Ref<bigint>) => {
   const onboardStore = useOnboardStore();
@@ -112,7 +115,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
         allowanceCheckInProgress.value = false;
         return;
       }
-      if (tokenAddress.value === L2_BASE_TOKEN_ADDRESS) {
+      if (isL2BaseTokenAddress(tokenAddress.value)) {
         isNativeToken.value = false;
         usesAssetIdWithdrawal.value = false;
         allowanceCheckInProgress.value = false;
@@ -371,10 +374,9 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
               functionName: "chainAssetHandler",
             })) as Address;
 
-            let switchedToL1 = false;
+            let l1FinalizationSubmitted = false;
             try {
               await onboardStore.switchNetworkById(l1ChainId, l1Network.name);
-              switchedToL1 = true;
               setAllowanceStatus.value = "waiting-for-signature";
               const txFinalizeHash = await writeContract(wagmiConfig, {
                 chainId: l1ChainId,
@@ -384,33 +386,44 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
                 args: [finalizeMigrationParams],
               });
 
+              l1FinalizationSubmitted = true;
               if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
               setAllowanceTransactionHashes.value.push(txFinalizeHash);
               tokenMigrationFinalizationHash.value = txFinalizeHash;
               setAllowanceStatus.value = "sending";
-              receipts.push(
-                await retry(
-                  () =>
-                    waitForTransactionReceipt(wagmiConfig, {
-                      chainId: l1ChainId,
-                      hash: txFinalizeHash,
-                      timeout: SYSCOIN_L1_RECEIPT_TIMEOUT,
-                      onReplaced: (replacement) => {
-                        if (preparationIsCurrent(migrationTokenAddress, migrationAssetId)) {
+              try {
+                receipts.push(
+                  await retry(
+                    () =>
+                      waitForTransactionReceipt(wagmiConfig, {
+                        chainId: l1ChainId,
+                        hash: txFinalizeHash,
+                        timeout: SYSCOIN_L1_RECEIPT_TIMEOUT,
+                        onReplaced: (replacement) => {
+                          if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return;
+                          if (replacement.reason === "cancelled") {
+                            tokenMigrationFinalizationHash.value = undefined;
+                            throw new Error("L1 Gateway migration finalization transaction was cancelled");
+                          }
                           setAllowanceTransactionHashes.value[setAllowanceTransactionHashes.value.length - 1] =
                             replacement.transaction.hash;
                           tokenMigrationFinalizationHash.value = replacement.transaction.hash;
-                        }
-                      },
-                    }),
-                  {
-                    retries: 3,
-                    delay: 5_000,
-                  }
-                )
-              );
+                        },
+                      }),
+                    {
+                      retries: 3,
+                      delay: 5_000,
+                    }
+                  )
+                );
+              } catch (error) {
+                if (preparationIsCurrent(migrationTokenAddress, migrationAssetId)) {
+                  tokenMigrationFinalizationHash.value = undefined;
+                }
+                throw error;
+              }
             } finally {
-              if (switchedToL1) {
+              if (l1FinalizationSubmitted) {
                 await onboardStore.switchNetworkById(eraNetwork.value.id, eraNetwork.value.name).catch(() => undefined);
               }
             }
