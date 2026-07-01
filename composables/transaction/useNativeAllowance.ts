@@ -209,8 +209,16 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
         setAllowanceStatus.value = "processing";
         const accountAddress = getAccount(wagmiConfig).address;
         const receipts = [];
+        const selectionMatches = (selectedTokenAddress: string | undefined, selectedAssetId?: string | null) => {
+          return (
+            tokenAddress.value === selectedTokenAddress &&
+            (selectedAssetId == null || assetId.value === selectedAssetId)
+          );
+        };
 
         if (tokenRegistrationRequired.value) {
+          const registeredTokenAddress = tokenAddress.value;
+          if (!registeredTokenAddress) return receipts;
           // SYSCOIN: registration is permissionless but state-changing; include
           // it in the approval flow so the later withdrawal has a stable asset id.
           setAllowanceStatus.value = "waiting-for-signature";
@@ -219,7 +227,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
             address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
             abi: L2_NATIVE_TOKEN_VAULT_ABI,
             functionName: "ensureTokenIsRegistered",
-            args: [tokenAddress.value as Address],
+            args: [registeredTokenAddress as Address],
           });
 
           setAllowanceTransactionHashes.value.push(txRegisterHash);
@@ -240,18 +248,24 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
               }
             )
           );
+          if (!selectionMatches(registeredTokenAddress)) return receipts;
           tokenRegistrationRequired.value = false;
-          assetId.value = (await readContract(wagmiConfig, {
+          const registeredAssetId = (await readContract(wagmiConfig, {
             address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
             abi: L2_NATIVE_TOKEN_VAULT_ABI,
             functionName: "assetId",
-            args: [tokenAddress.value],
+            args: [registeredTokenAddress],
             chainId: eraNetwork.value.id,
           })) as string;
-          tokenMigrationRequired.value = await checkTokenMigrationRequired(assetId.value);
+          const migrationRequired = await checkTokenMigrationRequired(registeredAssetId);
+          if (!selectionMatches(registeredTokenAddress)) return receipts;
+          assetId.value = registeredAssetId;
+          tokenMigrationRequired.value = migrationRequired;
         }
 
-        if (tokenMigrationRequired.value && assetId.value) {
+        const migrationAssetId = assetId.value;
+        const migrationTokenAddress = tokenAddress.value;
+        if (tokenMigrationRequired.value && migrationAssetId) {
           if (!tokenMigrationInitiated.value) {
             // SYSCOIN: v31 Gateway-settled chains require each asset's balance
             // accounting to be migrated before withdrawals / interop can leave
@@ -263,7 +277,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
               address: L2_ASSET_TRACKER_ADDRESS,
               abi: SYSCOIN_L2_ASSET_TRACKER_ABI,
               functionName: "initiateL1ToGatewayMigrationOnL2",
-              args: [assetId.value as `0x${string}`],
+              args: [migrationAssetId as `0x${string}`],
             });
 
             setAllowanceTransactionHashes.value.push(txMigrationHash);
@@ -285,21 +299,26 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
                 }
               )
             );
+            if (!selectionMatches(migrationTokenAddress, migrationAssetId)) return receipts;
             tokenMigrationInitiated.value = true;
           }
 
-          tokenMigrationRequired.value = await checkTokenMigrationRequired(assetId.value);
-          if (tokenMigrationRequired.value) {
+          const migrationRequired = await checkTokenMigrationRequired(migrationAssetId);
+          if (!selectionMatches(migrationTokenAddress, migrationAssetId)) return receipts;
+          tokenMigrationRequired.value = migrationRequired;
+          if (migrationRequired) {
             setAllowanceStatus.value = "done";
             return receipts;
           }
         }
 
         if (isNativeToken.value && amount.value > (approvedAllowance.value ?? 0n)) {
+          const approvalTokenAddress = tokenAddress.value;
+          if (!approvalTokenAddress) return receipts;
           setAllowanceStatus.value = "waiting-for-signature";
           const txApproveHash = await writeContract(wagmiConfig, {
             chainId: eraNetwork.value.id,
-            address: tokenAddress.value as Address,
+            address: approvalTokenAddress as Address,
             abi: IERC20_ABI,
             functionName: "approve",
             args: [L2_NATIVE_TOKEN_VAULT_ADDRESS, amount.value],
@@ -325,16 +344,21 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
               }
             )
           );
+          if (!selectionMatches(approvalTokenAddress)) return receipts;
         }
 
         if (isNativeToken.value) {
-          approvedAllowance.value = (await readContract(wagmiConfig, {
+          const allowanceTokenAddress = tokenAddress.value;
+          if (!allowanceTokenAddress) return receipts;
+          const allowance = (await readContract(wagmiConfig, {
             chainId: eraNetwork.value.id,
-            address: tokenAddress.value as Address,
+            address: allowanceTokenAddress as Address,
             abi: IERC20_ABI,
             functionName: "allowance",
             args: [accountAddress, L2_NATIVE_TOKEN_VAULT_ADDRESS],
           })) as bigint;
+          if (!selectionMatches(allowanceTokenAddress)) return receipts;
+          approvedAllowance.value = allowance;
         }
 
         setAllowanceStatus.value = "done";
