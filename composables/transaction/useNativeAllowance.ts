@@ -38,6 +38,7 @@ const isL2BaseTokenAddress = (address: string | undefined) => {
 const isTransactionHash = (value: unknown): value is Hash => {
   return typeof value === "string" && /^0x[0-9a-fA-F]{64}$/.test(value);
 };
+const isReceiptReverted = (status: unknown) => status === 0 || status === "0x0" || status === "reverted";
 
 type StoredTokenMigrationTransaction = {
   hash: Hash;
@@ -269,7 +270,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
     const receipt = await publicClient.getTransactionReceipt({ hash }).catch(() => undefined);
     // Pending L1 finalization should block duplicate submission after refresh.
     if (!receipt) return true;
-    return receipt.status === "success";
+    return !isReceiptReverted(receipt.status);
   };
 
   const currentSettlementLayerChainId = async () => {
@@ -650,42 +651,38 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
               if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
               trackTokenMigrationFinalizationHash(txFinalizeHash, migrationAssetId, l1ChainId, accountAddress);
               setAllowanceStatus.value = "sending";
-              try {
-                receipts.push(
-                  await retry(
-                    () =>
-                      waitForTransactionReceipt(wagmiConfig, {
-                        chainId: l1ChainId,
-                        hash: txFinalizeHash,
-                        timeout: SYSCOIN_L1_RECEIPT_TIMEOUT,
-                        onReplaced: (replacement) => {
-                          if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return;
-                          if (replacement.reason === "cancelled") {
-                            clearTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);
-                            throw new Error("L1 Gateway migration finalization transaction was cancelled");
-                          }
-                          setAllowanceTransactionHashes.value[setAllowanceTransactionHashes.value.length - 1] =
-                            replacement.transaction.hash;
-                          trackTokenMigrationFinalizationHash(
-                            replacement.transaction.hash,
-                            migrationAssetId,
-                            l1ChainId,
-                            accountAddress
-                          );
-                        },
-                      }),
-                    {
-                      retries: 3,
-                      delay: 5_000,
-                    }
-                  )
-                );
-              } catch (error) {
-                if (preparationIsCurrent(migrationTokenAddress, migrationAssetId)) {
-                  clearTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);
+              const finalizationReceipt = await retry(
+                () =>
+                  waitForTransactionReceipt(wagmiConfig, {
+                    chainId: l1ChainId,
+                    hash: txFinalizeHash,
+                    timeout: SYSCOIN_L1_RECEIPT_TIMEOUT,
+                    onReplaced: (replacement) => {
+                      if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return;
+                      if (replacement.reason === "cancelled") {
+                        clearTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);
+                        throw new Error("L1 Gateway migration finalization transaction was cancelled");
+                      }
+                      setAllowanceTransactionHashes.value[setAllowanceTransactionHashes.value.length - 1] =
+                        replacement.transaction.hash;
+                      trackTokenMigrationFinalizationHash(
+                        replacement.transaction.hash,
+                        migrationAssetId,
+                        l1ChainId,
+                        accountAddress
+                      );
+                    },
+                  }),
+                {
+                  retries: 3,
+                  delay: 5_000,
                 }
-                throw error;
+              );
+              if (isReceiptReverted(finalizationReceipt.status)) {
+                clearTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);
+                throw new Error("L1 Gateway migration finalization transaction reverted");
               }
+              receipts.push(finalizationReceipt);
             } finally {
               if (switchedToL1) {
                 await onboardStore.switchNetworkById(eraNetwork.value.id, eraNetwork.value.name).catch(() => undefined);
