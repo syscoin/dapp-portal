@@ -40,6 +40,10 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
   const tokenMigrationRequired = ref(false);
   const tokenMigrationInitiated = ref(false);
   const approvedAllowance = ref<null | bigint>(null);
+  const setAllowanceStatus = ref<"not-started" | "processing" | "waiting-for-signature" | "sending" | "done">(
+    "not-started"
+  );
+  const setAllowanceTransactionHashes = ref<(Hash | undefined)[]>([]);
   let allowanceCheckNonce = 0;
 
   const currentSettlementLayerChainId = async () => {
@@ -79,6 +83,8 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
       tokenMigrationRequired.value = false;
       tokenMigrationInitiated.value = false;
       approvedAllowance.value = null;
+      setAllowanceStatus.value = "not-started";
+      setAllowanceTransactionHashes.value = [];
 
       if (!tokenAddress.value) {
         isNativeToken.value = null;
@@ -193,10 +199,6 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
     return isNativeToken.value;
   });
 
-  const setAllowanceStatus = ref<"not-started" | "processing" | "waiting-for-signature" | "sending" | "done">(
-    "not-started"
-  );
-  const setAllowanceTransactionHashes = ref<(Hash | undefined)[]>([]);
   const {
     result: approveAllowanceReceipt,
     inProgress: approveAllowanceInProgress,

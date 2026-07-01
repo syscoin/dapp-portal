@@ -249,10 +249,7 @@
                   type="submit"
                   variant="primary"
                   class="w-full"
-                  :disabled="
-                    (setAllowanceStatus !== 'not-started' && setAllowanceStatus !== 'done') ||
-                    approveAllowanceInProgress
-                  "
+                  :disabled="setAllowanceStatus !== 'not-started' && setAllowanceStatus !== 'done'"
                   @click="setTokenAllowance()"
                 >
                   <transition v-bind="TransitionPrimaryButtonText" mode="out-in">
@@ -608,7 +605,6 @@ const {
   approveAllowanceReceipt,
   setAllowanceStatus,
   showAllowanceProcess,
-  approveAllowanceInProgress,
 } = useNativeAllowance(selectedTokenAddress, totalComputeAmount);
 
 const setTokenAllowance = async () => {
