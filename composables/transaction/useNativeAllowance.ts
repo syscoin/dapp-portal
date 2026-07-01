@@ -319,6 +319,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
                     if (preparationIsCurrent(migrationTokenAddress, migrationAssetId)) {
                       setAllowanceTransactionHashes.value[setAllowanceTransactionHashes.value.length - 1] =
                         replacement.transaction.hash;
+                      tokenMigrationInitiationHash.value = replacement.transaction.hash;
                     }
                   },
                 }),
