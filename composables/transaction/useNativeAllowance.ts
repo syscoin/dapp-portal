@@ -583,116 +583,112 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
           if (!l1Network) throw new Error(`L1 network is not available on ${eraNetwork.value.name}`);
           const l1ChainId = l1Network.id;
 
+          const l2Provider = await providerStore.requestProvider();
+          let finalizeMigrationParams;
+          try {
+            finalizeMigrationParams = await retry(
+              () =>
+                getSyscoinGatewayMigrationFinalizeParams(
+                  l2Provider,
+                  tokenMigrationInitiationHash.value as `0x${string}`,
+                  eraNetwork.value.id
+                ),
+              {
+                retries: 3,
+                delay: 10_000,
+              }
+            );
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (
+              message.includes("proof is not available") ||
+              message.includes("not mined yet") ||
+              message.includes("log is not available yet")
+            ) {
+              setAllowanceStatus.value = "done";
+              approveAllowanceReceipt.value = receipts;
+              return receipts;
+            }
+            throw error;
+          }
+
+          const l1AssetTrackerAddress = (await readContract(wagmiConfig, {
+            chainId: l1ChainId,
+            address: eraNetwork.value.syscoinBridge.bridgehubAddress,
+            abi: SYSCOIN_BRIDGEHUB_ABI,
+            functionName: "chainAssetHandler",
+          })) as Address;
+
           if (!tokenMigrationFinalizationHash.value) {
-            const l2Provider = await providerStore.requestProvider();
-            let finalizeMigrationParams;
+            restoreTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);
+          }
+          if (tokenMigrationFinalizationHash.value) {
+            const migrationFinalizationIsValid = await validateTokenMigrationFinalizationHash(
+              tokenMigrationFinalizationHash.value,
+              l1AssetTrackerAddress,
+              finalizeMigrationParams
+            );
+            if (!migrationFinalizationIsValid) {
+              clearTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);
+            }
+          }
+
+          if (!tokenMigrationFinalizationHash.value) {
+            let switchedToL1 = false;
             try {
-              finalizeMigrationParams = await retry(
-                () =>
-                  getSyscoinGatewayMigrationFinalizeParams(
-                    l2Provider,
-                    tokenMigrationInitiationHash.value as `0x${string}`,
-                    eraNetwork.value.id
-                  ),
-                {
-                  retries: 3,
-                  delay: 10_000,
-                }
-              );
-            } catch (error) {
-              const message = error instanceof Error ? error.message : String(error);
-              if (
-                message.includes("proof is not available") ||
-                message.includes("not mined yet") ||
-                message.includes("log is not available yet")
-              ) {
-                setAllowanceStatus.value = "done";
-                approveAllowanceReceipt.value = receipts;
-                return receipts;
-              }
-              throw error;
-            }
+              await onboardStore.switchNetworkById(l1ChainId, l1Network.name);
+              switchedToL1 = true;
+              setAllowanceStatus.value = "waiting-for-signature";
+              const txFinalizeHash = await writeContract(wagmiConfig, {
+                chainId: l1ChainId,
+                address: l1AssetTrackerAddress,
+                abi: SYSCOIN_L1_ASSET_TRACKER_ABI,
+                functionName: "receiveL1ToGatewayMigrationOnL1",
+                args: [finalizeMigrationParams],
+              });
 
-            const l1AssetTrackerAddress = (await readContract(wagmiConfig, {
-              chainId: l1ChainId,
-              address: eraNetwork.value.syscoinBridge.bridgehubAddress,
-              abi: SYSCOIN_BRIDGEHUB_ABI,
-              functionName: "chainAssetHandler",
-            })) as Address;
-
-            if (!tokenMigrationFinalizationHash.value) {
-              restoreTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);
-            }
-            if (tokenMigrationFinalizationHash.value) {
-              const migrationFinalizationIsValid = await validateTokenMigrationFinalizationHash(
-                tokenMigrationFinalizationHash.value,
-                l1AssetTrackerAddress,
-                finalizeMigrationParams
-              );
-              if (!migrationFinalizationIsValid) {
-                clearTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);
-              }
-            }
-
-            if (!tokenMigrationFinalizationHash.value) {
-              let switchedToL1 = false;
+              if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
+              trackTokenMigrationFinalizationHash(txFinalizeHash, migrationAssetId, l1ChainId, accountAddress);
+              setAllowanceStatus.value = "sending";
               try {
-                await onboardStore.switchNetworkById(l1ChainId, l1Network.name);
-                switchedToL1 = true;
-                setAllowanceStatus.value = "waiting-for-signature";
-                const txFinalizeHash = await writeContract(wagmiConfig, {
-                  chainId: l1ChainId,
-                  address: l1AssetTrackerAddress,
-                  abi: SYSCOIN_L1_ASSET_TRACKER_ABI,
-                  functionName: "receiveL1ToGatewayMigrationOnL1",
-                  args: [finalizeMigrationParams],
-                });
-
-                if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
-                trackTokenMigrationFinalizationHash(txFinalizeHash, migrationAssetId, l1ChainId, accountAddress);
-                setAllowanceStatus.value = "sending";
-                try {
-                  receipts.push(
-                    await retry(
-                      () =>
-                        waitForTransactionReceipt(wagmiConfig, {
-                          chainId: l1ChainId,
-                          hash: txFinalizeHash,
-                          timeout: SYSCOIN_L1_RECEIPT_TIMEOUT,
-                          onReplaced: (replacement) => {
-                            if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return;
-                            if (replacement.reason === "cancelled") {
-                              clearTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);
-                              throw new Error("L1 Gateway migration finalization transaction was cancelled");
-                            }
-                            setAllowanceTransactionHashes.value[setAllowanceTransactionHashes.value.length - 1] =
-                              replacement.transaction.hash;
-                            trackTokenMigrationFinalizationHash(
-                              replacement.transaction.hash,
-                              migrationAssetId,
-                              l1ChainId,
-                              accountAddress
-                            );
-                          },
-                        }),
-                      {
-                        retries: 3,
-                        delay: 5_000,
-                      }
-                    )
-                  );
-                } catch (error) {
-                  if (preparationIsCurrent(migrationTokenAddress, migrationAssetId)) {
-                    clearTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);
-                  }
-                  throw error;
+                receipts.push(
+                  await retry(
+                    () =>
+                      waitForTransactionReceipt(wagmiConfig, {
+                        chainId: l1ChainId,
+                        hash: txFinalizeHash,
+                        timeout: SYSCOIN_L1_RECEIPT_TIMEOUT,
+                        onReplaced: (replacement) => {
+                          if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return;
+                          if (replacement.reason === "cancelled") {
+                            clearTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);
+                            throw new Error("L1 Gateway migration finalization transaction was cancelled");
+                          }
+                          setAllowanceTransactionHashes.value[setAllowanceTransactionHashes.value.length - 1] =
+                            replacement.transaction.hash;
+                          trackTokenMigrationFinalizationHash(
+                            replacement.transaction.hash,
+                            migrationAssetId,
+                            l1ChainId,
+                            accountAddress
+                          );
+                        },
+                      }),
+                    {
+                      retries: 3,
+                      delay: 5_000,
+                    }
+                  )
+                );
+              } catch (error) {
+                if (preparationIsCurrent(migrationTokenAddress, migrationAssetId)) {
+                  clearTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);
                 }
-              } finally {
-                if (switchedToL1) {
-                  await onboardStore
-                    .switchNetworkById(eraNetwork.value.id, eraNetwork.value.name)
-                    .catch(() => undefined);
-                }
+                throw error;
+              }
+            } finally {
+              if (switchedToL1) {
+                await onboardStore.switchNetworkById(eraNetwork.value.id, eraNetwork.value.name).catch(() => undefined);
               }
             }
           }
