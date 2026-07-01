@@ -129,6 +129,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
           needsRegistration && isSyscoinBridgeNetwork(eraNetwork.value)
             ? (await currentSettlementLayerChainId()) !== BigInt(eraNetwork.value.l1Network?.id ?? 0)
             : await checkTokenMigrationRequired(checkedAssetId);
+        if (nonce !== allowanceCheckNonce) return;
         // SYSCOIN: fresh v31 withdrawals use asset ids for non-base ERC20s.
         // The separate `isNativeToken` flag only tracks whether the user must
         // approve the NativeTokenVault before withdrawing.
