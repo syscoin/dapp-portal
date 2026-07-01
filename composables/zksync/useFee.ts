@@ -145,10 +145,6 @@ export default (
         retry(async () => {
           const isCustomBridgeToken = !!token?.l2BridgeAddress;
           if (isSyscoinBridgeNetwork(selectedNetwork.value)) {
-            if (params!.type === "withdrawal" && !isSyscoinL2BaseToken(params!.tokenAddress) && !params!.assetId) {
-              resetFee();
-              return;
-            }
             // SYSCOIN: estimate the exact standard-EVM transaction shape
             // submitted in useTransaction.ts, avoiding ZKsync SDK EIP-712 RPCs.
             const transaction =
