@@ -25,6 +25,7 @@ export type FeeEstimationParams = {
   to: string;
   tokenAddress: string;
   isNativeToken: boolean | null;
+  usesAssetIdWithdrawal?: boolean;
   assetId?: string | null;
   amount: string;
 };
@@ -151,7 +152,7 @@ export default (
                     l2Token: params!.tokenAddress as `0x${string}`,
                     amount: BigInt(params!.amount),
                   })
-                : params!.isNativeToken && params!.assetId
+                : params!.usesAssetIdWithdrawal && params!.assetId
                 ? buildSyscoinNativeTokenWithdrawTransaction({
                     assetId: params!.assetId as `0x${string}`,
                     l1Receiver: params!.to as `0x${string}`,

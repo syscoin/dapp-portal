@@ -28,6 +28,7 @@ type TransactionParams = {
   tokenAddress: string;
   amount: BigNumberish;
   isNativeToken?: boolean | null;
+  usesAssetIdWithdrawal?: boolean;
   assetId?: string | null;
   bridgeAddress?: string;
 };
@@ -114,7 +115,7 @@ export default (getSigner: () => Promise<Signer | undefined>, getProvider: () =>
                 l2Token: transaction.tokenAddress as `0x${string}`,
                 amount: BigInt(transaction.amount.toString()),
               })
-            : transaction.isNativeToken && transaction.assetId
+            : transaction.usesAssetIdWithdrawal && transaction.assetId
             ? buildSyscoinNativeTokenWithdrawTransaction({
                 assetId: transaction.assetId as `0x${string}`,
                 l1Receiver: transaction.to as `0x${string}`,

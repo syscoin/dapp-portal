@@ -17,6 +17,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
   const { captureException } = useSentryLogger();
 
   const isNativeToken = ref<boolean | null>(null);
+  const usesAssetIdWithdrawal = ref(false);
   const allowanceCheckInProgress = ref<boolean>(false);
   const assetId = ref<null | string>(null);
   const tokenRegistrationRequired = ref(false);
@@ -27,6 +28,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
     [tokenAddress],
     async () => {
       const nonce = ++allowanceCheckNonce;
+      usesAssetIdWithdrawal.value = false;
       assetId.value = null;
       tokenRegistrationRequired.value = false;
       approvedAllowance.value = null;
@@ -38,6 +40,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
       }
       if (tokenAddress.value === L2_BASE_TOKEN_ADDRESS) {
         isNativeToken.value = false;
+        usesAssetIdWithdrawal.value = false;
         allowanceCheckInProgress.value = false;
         return;
       }
@@ -51,6 +54,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
           chainId: eraNetwork.value.id,
         })) as string;
         const needsRegistration = checkedAssetId === ZERO_HASH;
+        let originChainId: bigint | undefined;
         if (needsRegistration) {
           checkedAssetId = (await readContract(wagmiConfig, {
             address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
@@ -59,13 +63,24 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
             args: [tokenAddress.value],
             chainId: eraNetwork.value.id,
           })) as string;
+        } else {
+          originChainId = (await readContract(wagmiConfig, {
+            address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
+            abi: L2_NATIVE_TOKEN_VAULT_ABI,
+            functionName: "originChainId",
+            args: [checkedAssetId],
+            chainId: eraNetwork.value.id,
+          })) as bigint;
         }
         if (nonce !== allowanceCheckNonce) return;
         assetId.value = checkedAssetId;
         tokenRegistrationRequired.value = needsRegistration;
-        // SYSCOIN: v31 withdrawals use the NativeTokenVault asset-id path for
-        // non-base ERC20s, regardless of whether the origin chain is L1 or L2.
-        isNativeToken.value = true;
+        usesAssetIdWithdrawal.value = true;
+        isNativeToken.value = needsRegistration || originChainId === BigInt(eraNetwork.value.id);
+
+        if (!isNativeToken.value) {
+          return;
+        }
 
         const accountAddress = getAccount(wagmiConfig).address;
         const allowance = (await readContract(wagmiConfig, {
@@ -246,6 +261,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
 
   return {
     isNativeToken,
+    usesAssetIdWithdrawal,
     allowanceCheckInProgress,
     amountToTransferIsApproved,
     approvedAllowance,

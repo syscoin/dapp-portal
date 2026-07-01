@@ -53,7 +53,7 @@
           :tokens="availableTokens"
           :balances="availableBalances"
           :max-amount="maxAmount"
-          :approve-required="!!isNativeToken && !amountToTransferIsApproved"
+          :approve-required="requiresNativeTokenApproval"
           :loading="tokensRequestInProgress || balanceInProgress || feeLoading"
         >
           <template v-if="type === 'withdrawal' && account.address" #token-dropdown-bottom>
@@ -585,6 +585,7 @@ const withdrawalManualFinalizationRequired = computed(() => {
 
 const {
   isNativeToken,
+  usesAssetIdWithdrawal,
   assetId,
   allowanceCheckInProgress,
   amountToTransferIsApproved,
@@ -603,12 +604,15 @@ const setTokenAllowance = async () => {
   await fetchBalances(true);
 };
 
+const requiresNativeTokenApproval = computed(() => {
+  return props.type === "withdrawal" && !!isNativeToken.value && !amountToTransferIsApproved.value;
+});
 const feeLoading = computed(() => feeInProgress.value || (!fee.value && balanceInProgress.value));
 const estimate = async () => {
   if (allowanceCheckInProgress.value) {
     return;
   }
-  if (isNativeToken.value && !amountToTransferIsApproved.value) {
+  if (requiresNativeTokenApproval.value) {
     return;
   }
 
@@ -628,6 +632,7 @@ const estimate = async () => {
     to: transaction.value.to.address,
     tokenAddress: selectedToken.value.address,
     isNativeToken: isNativeToken.value,
+    usesAssetIdWithdrawal: props.type === "withdrawal" && usesAssetIdWithdrawal.value,
     assetId: assetId.value,
     amount: totalComputeAmount.value.toString(),
   });
@@ -688,7 +693,7 @@ const continueButtonDisabled = computed(() => {
   }
   if (feeLoading.value || !fee.value) return true;
   if (allowanceCheckInProgress.value) return true;
-  if (isNativeToken.value && !amountToTransferIsApproved.value) {
+  if (requiresNativeTokenApproval.value) {
     return true;
   }
   return false;
@@ -737,6 +742,7 @@ const makeTransaction = async () => {
       tokenAddress: transaction.value!.token.address,
       amount: transaction.value!.token.amount,
       isNativeToken: isNativeToken.value,
+      usesAssetIdWithdrawal: props.type === "withdrawal" && usesAssetIdWithdrawal.value,
       assetId: assetId.value,
       bridgeAddress: transaction.value!.token.l2BridgeAddress,
     },
