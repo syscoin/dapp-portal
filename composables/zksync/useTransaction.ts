@@ -34,6 +34,8 @@ type TransactionParams = {
   bridgeAddress?: string;
 };
 
+// SYSCOIN: system contract constants are lowercased for viem RPC calls, while
+// token metadata can arrive checksummed from registries/explorers.
 const isL2BaseTokenAddress = (address: string | undefined) => {
   return address?.toLowerCase() === L2_BASE_TOKEN_ADDRESS.toLowerCase();
 };

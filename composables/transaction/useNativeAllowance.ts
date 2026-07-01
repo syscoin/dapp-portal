@@ -27,6 +27,8 @@ import type { Address } from "viem";
 // SYSCOIN: v31 NativeTokenVault uses zero bytes32 as the "not registered"
 // sentinel for asset-id withdrawals.
 const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
+// SYSCOIN: Gateway migration initiation can outlive a browser session; persist
+// the tx hash only as a recoverable hint and validate it on-chain before reuse.
 const TOKEN_MIGRATION_INITIATION_STORAGE_PREFIX = "zksys-token-migration-initiation";
 const isL2BaseTokenAddress = (address: string | undefined) => {
   return address?.toLowerCase() === L2_BASE_TOKEN_ADDRESS.toLowerCase();
@@ -113,6 +115,8 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
     approveAllowanceInProgress.value = false;
   };
 
+  // SYSCOIN: keep the initiation tx hash recoverable across refreshes, but do
+  // not let local storage become authoritative for migration state.
   const trackTokenMigrationInitiationHash = (hash: Hash, migrationAssetId: string, accountAddress?: string) => {
     tokenMigrationInitiationHash.value = hash;
     tokenMigrationInitiated.value = true;
@@ -479,7 +483,11 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
               );
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
-              if (message.includes("proof is not available") || message.includes("not mined yet")) {
+              if (
+                message.includes("proof is not available") ||
+                message.includes("not mined yet") ||
+                message.includes("log is not available yet")
+              ) {
                 setAllowanceStatus.value = "done";
                 approveAllowanceReceipt.value = receipts;
                 return receipts;
