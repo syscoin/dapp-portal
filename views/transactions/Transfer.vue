@@ -326,7 +326,7 @@ import useTransaction, { isWithdrawalManualFinalizationRequired } from "@/compos
 import { customBridgeTokens } from "@/data/customBridgeTokens";
 import { isCustomNode } from "@/data/networks";
 import { syscoinTanenbaumTokens } from "@/data/syscoin";
-import { isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
+import { isSyscoinBridgeNetwork, isSyscoinL2BaseToken } from "@/utils/syscoinBridge";
 import TransferSubmitted from "@/views/transactions/TransferSubmitted.vue";
 import WithdrawalSubmitted from "@/views/transactions/WithdrawalSubmitted.vue";
 
@@ -623,6 +623,18 @@ const requiresNativeTokenApproval = computed(() => {
 const showWithdrawalAllowanceProcess = computed(() => {
   return props.type === "withdrawal" && showAllowanceProcess.value;
 });
+// SYSCOIN: all non-base ERC20 withdrawals need an NTV asset id for the v31
+// asset-router path. While the async token check is still resolving, keep
+// estimation/submission paused instead of surfacing a local builder error.
+const syscoinWithdrawalAssetIdMissing = computed(() => {
+  return (
+    props.type === "withdrawal" &&
+    isSyscoinBridgeNetwork(eraNetwork.value) &&
+    !!selectedToken.value &&
+    !isSyscoinL2BaseToken(selectedToken.value.address) &&
+    !assetId.value
+  );
+});
 const withdrawalPreparationButtonLabel = computed(() => {
   if (tokenRegistrationRequired.value) return `Register ${selectedToken.value?.symbol}`;
   if (tokenMigrationRequired.value) {
@@ -643,6 +655,9 @@ const estimate = async () => {
     return;
   }
   if (showWithdrawalAllowanceProcess.value) {
+    return;
+  }
+  if (syscoinWithdrawalAssetIdMissing.value) {
     return;
   }
 
@@ -725,6 +740,7 @@ const continueButtonDisabled = computed(() => {
   }
   if (feeLoading.value || !fee.value) return true;
   if (allowanceCheckInProgress.value) return true;
+  if (syscoinWithdrawalAssetIdMissing.value) return true;
   if (showWithdrawalAllowanceProcess.value) {
     return true;
   }
