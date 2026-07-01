@@ -244,6 +244,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
           args: [registeredTokenAddress as Address],
         });
 
+        if (!preparationIsCurrent(registeredTokenAddress)) return stopStalePreparation();
         setAllowanceTransactionHashes.value.push(txRegisterHash);
         setAllowanceStatus.value = "sending";
         receipts.push(
@@ -296,6 +297,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
             args: [migrationAssetId as `0x${string}`],
           });
 
+          if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
           setAllowanceTransactionHashes.value.push(txMigrationHash);
           setAllowanceStatus.value = "sending";
           receipts.push(
@@ -343,6 +345,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
           args: [L2_NATIVE_TOKEN_VAULT_ADDRESS, amount.value],
         });
 
+        if (!preparationIsCurrent(approvalTokenAddress)) return stopStalePreparation();
         setAllowanceTransactionHashes.value.push(txApproveHash);
         setAllowanceStatus.value = "sending";
 
