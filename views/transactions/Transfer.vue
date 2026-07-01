@@ -219,8 +219,9 @@
         <CommonHeightTransition
           v-if="step === 'form'"
           :opened="
+            type === 'withdrawal' &&
             !!isNativeToken &&
-            (showAllowanceProcess || !amountToTransferIsApproved || setAllowanceTransactionHashes.length > 0)
+            (showWithdrawalAllowanceProcess || !amountToTransferIsApproved || setAllowanceTransactionHashes.length > 0)
           "
         >
           <AllowancePanel
@@ -240,7 +241,7 @@
         <TransactionFooter>
           <template #after-checks>
             <template v-if="step === 'form'">
-              <template v-if="showAllowanceProcess">
+              <template v-if="showWithdrawalAllowanceProcess">
                 <CommonButton
                   type="submit"
                   variant="primary"
@@ -407,7 +408,10 @@ const availableTokens = computed(() => {
 const availableBalances = computed(() => {
   if (props.type === "withdrawal") {
     if (!tokens.value) return [];
-    return balance.value.filter((token) => isConfiguredWithdrawableToken(token) || isPositiveBalance(token));
+    return balance.value.filter(
+      (token) =>
+        isConfiguredWithdrawableToken(token) || (isSyscoinBridgeNetwork(eraNetwork.value) && isPositiveBalance(token))
+    );
   }
   return balance.value;
 });
@@ -610,6 +614,11 @@ const setTokenAllowance = async () => {
 // current-chain-native/unregistered withdrawals need the approval step.
 const requiresNativeTokenApproval = computed(() => {
   return props.type === "withdrawal" && !!isNativeToken.value && !amountToTransferIsApproved.value;
+});
+// SYSCOIN: the NativeTokenVault registration/approval panel is withdrawal-only;
+// regular L2 transfers never consume this allowance.
+const showWithdrawalAllowanceProcess = computed(() => {
+  return props.type === "withdrawal" && showAllowanceProcess.value;
 });
 const feeLoading = computed(() => feeInProgress.value || (!fee.value && balanceInProgress.value));
 const estimate = async () => {
