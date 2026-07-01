@@ -40,4 +40,12 @@ export const syscoinTanenbaumTokens: Token[] = [
     iconUrl: "/img/syscoin-icon.svg",
     isETH: true,
   },
+  {
+    address: "0x6EBb170f69D886916D9ee9E585CE39E626CbC35d",
+    l2Address: "0x6EBb170f69D886916D9ee9E585CE39E626CbC35d",
+    symbol: "ZKSYS",
+    name: "ZKSYS",
+    decimals: 18,
+    iconUrl: "/img/zksys-icon.svg",
+  },
 ];

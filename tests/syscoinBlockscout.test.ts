@@ -5,6 +5,7 @@ import { $fetch } from "ofetch";
 import { beforeEach, describe, it, vi } from "vitest";
 
 import { customBridgeTokens } from "../data/customBridgeTokens";
+import { syscoinTanenbaumTokens } from "../data/syscoin";
 import {
   attachSyscoinL1MappingsToL2Tokens,
   fetchSyscoinBlockscoutTokenBalances,
@@ -13,7 +14,6 @@ import {
   mergeSyscoinTokens,
   resolveSyscoinL2TokenMappings,
 } from "../utils/syscoinBlockscout";
-import { AddressChainType, getBalancesWithCustomBridgeTokens, getTokensWithCustomBridgeTokens } from "../utils/helpers";
 
 vi.mock("ofetch", () => ({
   $fetch: vi.fn(async () => ({ items: [], next_page_params: null })),
@@ -160,6 +160,32 @@ describe("syscoin Blockscout mapping", () => {
     assert.equal(mappings.get(l1Dai.toLowerCase())?.l2Address, l2Dai);
   });
 
+  it("applies official L2 metadata to future L1 wrappers", async () => {
+    const l1ZksysWrapper = "0x1111111111111111111111111111111111111111";
+    const l2Zksys = "0x6EBb170f69D886916D9ee9E585CE39E626CbC35d";
+    const publicClient = {
+      readContract: async () => l2Zksys,
+    };
+
+    const mappings = await resolveSyscoinL2TokenMappings(
+      publicClient as any,
+      [
+        {
+          address: l1ZksysWrapper,
+          symbol: "UNKNOWN",
+          decimals: 18,
+        },
+      ],
+      syscoinTanenbaumTokens
+    );
+    const mappedToken = mappings.get(l1ZksysWrapper.toLowerCase());
+
+    assert.equal(mappedToken?.l1Address, l1ZksysWrapper);
+    assert.equal(mappedToken?.l2Address, l2Zksys);
+    assert.equal(mappedToken?.symbol, "ZKSYS");
+    assert.equal(mappedToken?.iconUrl, "/img/zksys-icon.svg");
+  });
+
   it("attaches L1 mapping to L2 Blockscout balances", () => {
     const [mappedToken] = attachSyscoinL1MappingsToL2Tokens(
       [
@@ -176,16 +202,12 @@ describe("syscoin Blockscout mapping", () => {
     assert.equal(mappedToken.l2Address, l2Dai);
   });
 
-  it("injects curated Syscoin bridge tokens even without explorer balances", () => {
-    const [zksysToken] = getTokensWithCustomBridgeTokens([], AddressChainType.L1, 5700);
-    const [zksysBalance] = getBalancesWithCustomBridgeTokens([], AddressChainType.L1, 5700);
+  it("keeps canonical zkSYS in the official L2 token set", () => {
+    const zksysToken = syscoinTanenbaumTokens.find((token) => token.symbol === "ZKSYS");
 
-    assert.equal(zksysToken.symbol, "ZKSYS");
-    assert.equal(zksysToken.address, "0xA7ad827393EB60764D3d466b4D363D68602FD2D7");
-    assert.equal(zksysToken.l2Address, "0x83b8cdEbC57b60d400D5550C0Fbb01e90dADd372");
-    assert.equal(zksysToken.iconUrl, "/img/zksys-icon.svg");
-    assert.equal(zksysBalance.symbol, "ZKSYS");
-    assert.equal(zksysBalance.amount, "0");
-    assert.equal(zksysBalance.iconUrl, "/img/zksys-icon.svg");
+    assert.equal(zksysToken?.address, "0x6EBb170f69D886916D9ee9E585CE39E626CbC35d");
+    assert.equal(zksysToken?.l1Address, undefined);
+    assert.equal(zksysToken?.l2Address, "0x6EBb170f69D886916D9ee9E585CE39E626CbC35d");
+    assert.equal(zksysToken?.iconUrl, "/img/zksys-icon.svg");
   });
 });

@@ -175,8 +175,13 @@ export const resolveSyscoinL2TokenMappings = async (
 
       if (!l2Address || isAddressEqual(getAddress(l2Address), zeroAddress)) return;
 
+      const officialL2Token = matchingOfficialToken(l2Address, "L2", officialTokens);
       mappings.set(l1Address.toLowerCase(), {
         ...l1Token,
+        name: officialL2Token?.name || l1Token.name,
+        symbol: officialL2Token?.symbol || l1Token.symbol,
+        decimals: officialL2Token?.decimals ?? l1Token.decimals,
+        iconUrl: officialL2Token?.iconUrl || l1Token.iconUrl,
         l1Address,
         l2Address: getAddress(l2Address),
       });
