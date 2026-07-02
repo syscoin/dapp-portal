@@ -164,7 +164,7 @@ const withdrawnAmountDisplay = ref("");
 
 const earnStore = useZkSysEarnStore();
 const onboardStore = useOnboardStore();
-const { isConnected } = storeToRefs(onboardStore);
+const { account, isConnected } = storeToRefs(onboardStore);
 const { selectedNetwork } = storeToRefs(useNetworkStore());
 const { isEarnAvailable, userPosition, userPositionInProgress, hasPendingStakeWeight } = storeToRefs(earnStore);
 const { isCorrectNetworkSet } = storeToRefs(useZkSyncWalletStore());
@@ -191,9 +191,15 @@ const nativeToken = computed<Token>(() => ({
 
 earnStore.requestStaticConfig().catch(() => undefined);
 earnStore.requestNetworkStats().catch(() => undefined);
-if (isConnected.value) {
-  earnStore.requestUserPosition().catch(() => undefined);
-}
+// The store clears userPosition on account change, so refetch whenever a
+// wallet connects or the account switches while this page is open.
+watch(
+  () => account.value.address,
+  (address) => {
+    if (address) earnStore.requestUserPosition().catch(() => undefined);
+  },
+  { immediate: true }
+);
 
 const positionLoading = computed(() => userPositionInProgress.value && !userPosition.value);
 const stakedAmount = computed(() => userPosition.value?.stake ?? 0n);
