@@ -38,9 +38,10 @@ const { selectedNetwork } = storeToRefs(useNetworkStore());
 const stakeSymbol = computed(() => selectedNetwork.value.nativeCurrency?.symbol ?? "SYS");
 
 const now = ref(Date.now());
-useInterval(() => {
+const { stop: stopClock } = useInterval(() => {
   now.value = Date.now();
 }, 30_000);
+onBeforeUnmount(stopClock);
 
 const warmupCountdown = computed(() => {
   if (!userPosition.value || !staticConfig.value) return "";

@@ -54,9 +54,10 @@ const loading = computed(() => (!networkStats.value || !staticConfig.value) && n
 const stakeSymbol = computed(() => selectedNetwork.value.nativeCurrency?.symbol ?? "SYS");
 
 const now = ref(Date.now());
-useInterval(() => {
+const { stop: stopClock } = useInterval(() => {
   now.value = Date.now();
 }, 30_000);
+onBeforeUnmount(stopClock);
 
 const currentPeriodDisplay = computed(() => networkStats.value?.currentPeriod.toString() ?? "0");
 const periodCloseSub = computed(() => {

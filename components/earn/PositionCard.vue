@@ -227,9 +227,10 @@ const networkShare = computed(() =>
 );
 
 const now = ref(Date.now());
-useInterval(() => {
+const { stop: stopClock } = useInterval(() => {
   now.value = Date.now();
 }, 30_000);
+onBeforeUnmount(stopClock);
 
 // Per-component pending status: stake and sentry weight queue independently
 // and can have different effective periods; activate applies whichever is due.
