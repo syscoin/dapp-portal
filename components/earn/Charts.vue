@@ -46,7 +46,7 @@
         <div class="chart-header">
           <div>
             <div class="chart-title">Total reward weight</div>
-            <div class="chart-subtitle">Stake and sentry weight competing for each period's rewards</div>
+            <div class="chart-subtitle">Stake/sentry weight per period</div>
           </div>
         </div>
         <EarnChart v-if="weightData" type="line" :data="weightData" :options="weightOptions" :height="200" />
