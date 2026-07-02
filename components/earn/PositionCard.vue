@@ -70,13 +70,9 @@
         <div v-if="hasPendingWeight" class="position-row is-highlighted">
           <div class="row-info">
             <div class="row-label">Pending weight</div>
-            <div class="row-value">+{{ zkSysFormatTokenCompact(pendingStakeWeightDelta) }}</div>
+            <div class="row-value">+{{ zkSysFormatTokenCompact(pendingWeightDelta) }}</div>
             <div class="row-sub">
-              <template v-if="isPendingWeightActivatable">Warm-up complete — activate to start earning</template>
-              <template v-else>
-                Activates in period {{ pendingEffectivePeriod }}
-                <template v-if="activationCountdown">(~{{ activationCountdown }})</template>
-              </template>
+              <div v-for="line in pendingComponentLines" :key="line">{{ line }}</div>
             </div>
           </div>
           <div class="row-actions">
@@ -151,9 +147,9 @@
         </div>
       </div>
 
-      <CommonHeightTransition :opened="!!actionError">
+      <CommonHeightTransition :opened="!!displayedError">
         <CommonAlert variant="error" size="sm" :icon="ExclamationTriangleIcon" class="mt-block-gap">
-          <p>{{ actionError?.message }}</p>
+          <p>{{ displayedError?.message }}</p>
         </CommonAlert>
       </CommonHeightTransition>
       <CommonHeightTransition :opened="!!successMessage">
@@ -190,6 +186,8 @@ import type { Address } from "viem";
 
 const earnStore = useZkSysEarnStore();
 const onboardStore = useOnboardStore();
+const eraWalletStore = useZkSyncWalletStore();
+const { isCorrectNetworkSet } = storeToRefs(eraWalletStore);
 const { selectedNetwork } = storeToRefs(useNetworkStore());
 const {
   userPosition: position,
@@ -198,8 +196,14 @@ const {
   networkStats,
   staticConfig,
   hasPendingWeight,
+  hasPendingStakeWeight,
+  hasPendingSentryWeight,
+  isPendingStakeActivatable,
+  isPendingSentryActivatable,
   isPendingWeightActivatable,
   pendingStakeWeightDelta,
+  pendingSentryWeightDelta,
+  pendingWeightDelta,
   undistributedRewards,
 } = storeToRefs(earnStore);
 
@@ -227,19 +231,47 @@ useInterval(() => {
   now.value = Date.now();
 }, 30_000);
 
-const pendingEffectivePeriod = computed(() => {
-  const stakePeriod = position.value?.pendingStakeEffectivePeriod;
-  return stakePeriod !== undefined ? stakePeriod.toString() : "";
-});
-const activationCountdown = computed(() => {
-  if (!position.value || !staticConfig.value || !earnStore.hasPendingStakeWeight) return "";
-  const readyAt = zkSysEffectivePeriodStartTime(
-    position.value.pendingStakeEffectivePeriod,
-    staticConfig.value.startTime,
-    staticConfig.value.periodSeconds
-  );
-  const secondsLeft = Number(readyAt) - Math.floor(now.value / 1000);
-  return secondsLeft > 0 ? zkSysFormatDuration(secondsLeft) : "";
+// Per-component pending status: stake and sentry weight queue independently
+// and can have different effective periods; activate applies whichever is due.
+const pendingComponentLine = (label: string, delta: bigint, effectivePeriod: bigint, activatable: boolean) => {
+  const amount = `${label} +${zkSysFormatTokenCompact(delta)}`;
+  if (activatable) return `${amount} — ready to activate`;
+  let countdown = "";
+  if (staticConfig.value) {
+    const readyAt = zkSysEffectivePeriodStartTime(
+      effectivePeriod,
+      staticConfig.value.startTime,
+      staticConfig.value.periodSeconds
+    );
+    const secondsLeft = Number(readyAt) - Math.floor(now.value / 1000);
+    if (secondsLeft > 0) countdown = ` (~${zkSysFormatDuration(secondsLeft)})`;
+  }
+  return `${amount} — activates in period ${effectivePeriod}${countdown}`;
+};
+const pendingComponentLines = computed(() => {
+  if (!position.value) return [];
+  const lines: string[] = [];
+  if (hasPendingStakeWeight.value) {
+    lines.push(
+      pendingComponentLine(
+        "Stake",
+        pendingStakeWeightDelta.value,
+        position.value.pendingStakeEffectivePeriod,
+        isPendingStakeActivatable.value
+      )
+    );
+  }
+  if (hasPendingSentryWeight.value) {
+    lines.push(
+      pendingComponentLine(
+        "Sentry",
+        pendingSentryWeightDelta.value,
+        position.value.pendingSentryNodeEffectivePeriod,
+        isPendingSentryActivatable.value
+      )
+    );
+  }
+  return lines;
 });
 
 const showDistributeRow = computed(() => {
@@ -247,6 +279,8 @@ const showDistributeRow = computed(() => {
 });
 
 const successMessage = ref("");
+const networkSwitchError = ref<Error | undefined>();
+const displayedError = computed(() => actionError.value ?? networkSwitchError.value);
 const lastTransactionUrl = computed(() => {
   if (!transactionHash.value || !selectedNetwork.value.blockExplorerUrl) return undefined;
   return `${selectedNetwork.value.blockExplorerUrl}/tx/${transactionHash.value}`;
@@ -254,6 +288,20 @@ const lastTransactionUrl = computed(() => {
 
 const runAction = async (fn: () => Promise<unknown>, message: string) => {
   successMessage.value = "";
+  // SYSCOIN: dashboard actions send L2 transactions directly, so mirror the
+  // TransactionFooter network guard and switch the wallet to the zkSYS L2
+  // before signing (stake/withdraw flows get this from TransactionFooter).
+  if (!isCorrectNetworkSet.value) {
+    await eraWalletStore.setCorrectNetwork();
+    if (!isCorrectNetworkSet.value) {
+      networkSwitchError.value = new Error(
+        `Switch your wallet to ${selectedNetwork.value.name} to continue. ` +
+          "If your wallet does not support automatic switching, change the network manually and try again."
+      );
+      return;
+    }
+  }
+  networkSwitchError.value = undefined;
   const receipt = await fn();
   if (receipt) {
     successMessage.value = message;

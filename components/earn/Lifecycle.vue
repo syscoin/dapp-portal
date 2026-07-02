@@ -26,8 +26,14 @@ import { zkSysEffectivePeriodStartTime, zkSysFormatDuration } from "@/utils/zksy
 type StepStatus = "done" | "active" | "upcoming";
 
 const earnStore = useZkSysEarnStore();
-const { userPosition, staticConfig, hasPendingWeight, isPendingWeightActivatable, hasPendingStakeWeight } =
-  storeToRefs(earnStore);
+const {
+  userPosition,
+  staticConfig,
+  hasPendingWeight,
+  isPendingWeightActivatable,
+  hasPendingStakeWeight,
+  hasPendingSentryWeight,
+} = storeToRefs(earnStore);
 const { selectedNetwork } = storeToRefs(useNetworkStore());
 const stakeSymbol = computed(() => selectedNetwork.value.nativeCurrency?.symbol ?? "SYS");
 
@@ -37,9 +43,16 @@ useInterval(() => {
 }, 30_000);
 
 const warmupCountdown = computed(() => {
-  if (!hasPendingStakeWeight.value || !userPosition.value || !staticConfig.value) return "";
+  if (!userPosition.value || !staticConfig.value) return "";
+  // Earliest effective period across pending components (stake and sentry
+  // weight queue independently).
+  const pendingPeriods: bigint[] = [];
+  if (hasPendingStakeWeight.value) pendingPeriods.push(userPosition.value.pendingStakeEffectivePeriod);
+  if (hasPendingSentryWeight.value) pendingPeriods.push(userPosition.value.pendingSentryNodeEffectivePeriod);
+  if (!pendingPeriods.length) return "";
+  const earliest = pendingPeriods.reduce((min, period) => (period < min ? period : min));
   const readyAt = zkSysEffectivePeriodStartTime(
-    userPosition.value.pendingStakeEffectivePeriod,
+    earliest,
     staticConfig.value.startTime,
     staticConfig.value.periodSeconds
   );

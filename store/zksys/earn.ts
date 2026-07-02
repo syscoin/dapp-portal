@@ -273,6 +273,16 @@ export const useZkSysEarnStore = defineStore("zkSysEarn", () => {
     return delta > 0n ? delta : 0n;
   });
 
+  /** Queued sentry-node weight increase (pending target minus currently active sentry weight). */
+  const pendingSentryWeightDelta = computed(() => {
+    if (!hasPendingSentryWeight.value || !userPosition.value) return 0n;
+    const delta = userPosition.value.pendingSentryNodeWeight - userPosition.value.activeSentryNodeWeight;
+    return delta > 0n ? delta : 0n;
+  });
+
+  /** Combined queued weight increase across both components. */
+  const pendingWeightDelta = computed(() => pendingStakeWeightDelta.value + pendingSentryWeightDelta.value);
+
   /** Rewards scheduled for closed periods that still need a permissionless distribute() call. */
   const undistributedRewards = computed(() => {
     if (!networkStats.value || !staticConfig.value) return 0n;
@@ -337,6 +347,8 @@ export const useZkSysEarnStore = defineStore("zkSysEarn", () => {
     isPendingSentryActivatable,
     isPendingWeightActivatable,
     pendingStakeWeightDelta,
+    pendingSentryWeightDelta,
+    pendingWeightDelta,
     undistributedRewards,
     currentPeriodCloseTime,
     actionableCount,
