@@ -241,7 +241,7 @@
           />
         </CommonHeightTransition>
 
-        <TransactionFooter :allow-different-network="gatewayMigrationFinalizationStep">
+        <TransactionFooter>
           <template #after-checks>
             <template v-if="step === 'form'">
               <template v-if="showWithdrawalAllowanceProcess">
@@ -622,11 +622,6 @@ const requiresNativeTokenApproval = computed(() => {
 // regular L2 transfers never consume this allowance.
 const showWithdrawalAllowanceProcess = computed(() => {
   return props.type === "withdrawal" && showAllowanceProcess.value;
-});
-// SYSCOIN: after the L2 Gateway migration initiation is submitted, the next
-// wallet transaction is L1 finalization, so the footer must not force zkSYS.
-const gatewayMigrationFinalizationStep = computed(() => {
-  return props.type === "withdrawal" && tokenMigrationRequired.value && tokenMigrationInitiated.value;
 });
 const withdrawalPreparationButtonLabel = computed(() => {
   if (tokenRegistrationRequired.value) return `Register ${selectedToken.value?.symbol}`;

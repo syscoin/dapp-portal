@@ -11,14 +11,9 @@ import {
   L2_SYSTEM_CONTEXT_ADDRESS,
 } from "@/utils/constants";
 import {
-  SYSCOIN_BRIDGEHUB_ABI,
-  SYSCOIN_L1_ASSET_TRACKER_ABI,
-  SYSCOIN_L1_RECEIPT_TIMEOUT,
   SYSCOIN_L2_ASSET_TRACKER_ABI,
   SYSCOIN_L2_SYSTEM_CONTEXT_ABI,
-  getSyscoinGatewayMigrationFinalizeParams,
   isSyscoinBridgeNetwork,
-  type SyscoinFinalizeWithdrawalParams,
 } from "@/utils/syscoinBridge";
 
 import { useSentryLogger } from "../useSentryLogger";
@@ -31,17 +26,12 @@ const ZERO_HASH = "0x00000000000000000000000000000000000000000000000000000000000
 // SYSCOIN: Gateway migration legs can outlive a browser session; persist tx
 // hashes only as recoverable hints and validate them on-chain before reuse.
 const TOKEN_MIGRATION_INITIATION_STORAGE_PREFIX = "zksys-token-migration-initiation";
-const TOKEN_MIGRATION_FINALIZATION_STORAGE_PREFIX = "zksys-token-migration-finalization";
 const isL2BaseTokenAddress = (address: string | undefined) => {
   return address?.toLowerCase() === L2_BASE_TOKEN_ADDRESS.toLowerCase();
 };
 const isTransactionHash = (value: unknown): value is Hash => {
   return typeof value === "string" && /^0x[0-9a-fA-F]{64}$/.test(value);
 };
-// SYSCOIN: normalize L1 receipt status shapes before deciding whether to clear
-// persisted Gateway migration finalization hints.
-const isReceiptReverted = (status: unknown) => status === 0 || status === "0x0" || status === "reverted";
-
 type StoredTokenMigrationTransaction = {
   hash: Hash;
   createdAt: number;
@@ -104,7 +94,6 @@ const clearStoredTokenMigrationHash = (
 };
 
 export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount: Ref<bigint>) => {
-  const onboardStore = useOnboardStore();
   const providerStore = useZkSyncProviderStore();
   const { eraNetwork } = storeToRefs(providerStore);
   const { captureException } = useSentryLogger();
@@ -120,7 +109,6 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
   const tokenMigrationRequired = ref(false);
   const tokenMigrationInitiated = ref(false);
   const tokenMigrationInitiationHash = ref<Hash | undefined>();
-  const tokenMigrationFinalizationHash = ref<Hash | undefined>();
   const approvedAllowance = ref<null | bigint>(null);
   const setAllowanceStatus = ref<"not-started" | "processing" | "waiting-for-signature" | "sending" | "done">(
     "not-started"
@@ -183,61 +171,6 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
     }
   };
 
-  // SYSCOIN: persist the L1 finalization leg separately from the L2 initiation
-  // leg so a refresh does not prompt duplicate Gateway settlement transactions.
-  const trackTokenMigrationFinalizationHash = (
-    hash: Hash,
-    migrationAssetId: string,
-    l1ChainId: number,
-    accountAddress?: string
-  ) => {
-    tokenMigrationFinalizationHash.value = hash;
-    if (!setAllowanceTransactionHashes.value.includes(hash)) {
-      setAllowanceTransactionHashes.value.push(hash);
-    }
-    writeStoredTokenMigrationHash(
-      TOKEN_MIGRATION_FINALIZATION_STORAGE_PREFIX,
-      l1ChainId,
-      accountAddress,
-      migrationAssetId,
-      hash
-    );
-  };
-
-  const clearTokenMigrationFinalizationHash = (
-    migrationAssetId: string,
-    l1ChainId: number,
-    accountAddress?: string
-  ) => {
-    const hash = tokenMigrationFinalizationHash.value;
-    tokenMigrationFinalizationHash.value = undefined;
-    if (hash) {
-      setAllowanceTransactionHashes.value = setAllowanceTransactionHashes.value.filter((value) => value !== hash);
-    }
-    clearStoredTokenMigrationHash(
-      TOKEN_MIGRATION_FINALIZATION_STORAGE_PREFIX,
-      l1ChainId,
-      accountAddress,
-      migrationAssetId
-    );
-  };
-
-  const restoreTokenMigrationFinalizationHash = (
-    migrationAssetId: string,
-    l1ChainId: number,
-    accountAddress?: string
-  ) => {
-    const storedHash = readStoredTokenMigrationHash(
-      TOKEN_MIGRATION_FINALIZATION_STORAGE_PREFIX,
-      l1ChainId,
-      accountAddress,
-      migrationAssetId
-    );
-    if (storedHash) {
-      trackTokenMigrationFinalizationHash(storedHash, migrationAssetId, l1ChainId, accountAddress);
-    }
-  };
-
   const validateTokenMigrationInitiationHash = async (
     provider: { send: (method: string, params: unknown[]) => Promise<any> },
     hash: Hash,
@@ -261,30 +194,6 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
     if (receipt.status !== "0x1") return false;
     if (!receipt.to || receipt.to.toLowerCase() !== L2_ASSET_TRACKER_ADDRESS.toLowerCase()) return false;
     return true;
-  };
-
-  // SYSCOIN: a restored L1 hash is trusted only when it exactly matches the
-  // derived Gateway migration finalization calldata for this asset.
-  const validateTokenMigrationFinalizationHash = async (
-    hash: Hash,
-    l1AssetTrackerAddress: Address,
-    finalizeMigrationParams: SyscoinFinalizeWithdrawalParams
-  ) => {
-    const publicClient = onboardStore.getPublicClient();
-    const transaction = await publicClient.getTransaction({ hash }).catch(() => undefined);
-    if (!transaction) return false;
-    const expectedInput = encodeFunctionData({
-      abi: SYSCOIN_L1_ASSET_TRACKER_ABI,
-      functionName: "receiveL1ToGatewayMigrationOnL1",
-      args: [finalizeMigrationParams],
-    });
-    if (!transaction.to || transaction.to.toLowerCase() !== l1AssetTrackerAddress.toLowerCase()) return false;
-    if (transaction.input?.toLowerCase() !== expectedInput.toLowerCase()) return false;
-
-    const receipt = await publicClient.getTransactionReceipt({ hash }).catch(() => undefined);
-    // Pending L1 finalization should block duplicate submission after refresh.
-    if (!receipt) return true;
-    return !isReceiptReverted(receipt.status);
   };
 
   const currentSettlementLayerChainId = async () => {
@@ -324,7 +233,6 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
       tokenMigrationRequired.value = false;
       tokenMigrationInitiated.value = false;
       tokenMigrationInitiationHash.value = undefined;
-      tokenMigrationFinalizationHash.value = undefined;
       approvedAllowance.value = null;
       setAllowanceStatus.value = "not-started";
       setAllowanceTransactionHashes.value = [];
@@ -396,14 +304,6 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
             accountAddress,
             checkedAssetId
           );
-          if (eraNetwork.value.l1Network) {
-            clearStoredTokenMigrationHash(
-              TOKEN_MIGRATION_FINALIZATION_STORAGE_PREFIX,
-              eraNetwork.value.l1Network.id,
-              accountAddress,
-              checkedAssetId
-            );
-          }
         }
 
         if (!isNativeToken.value) {
@@ -593,127 +493,11 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
           tokenMigrationInitiated.value = true;
         }
 
-        if (isSyscoinBridgeNetwork(eraNetwork.value) && tokenMigrationInitiationHash.value) {
-          const l1Network = eraNetwork.value.l1Network;
-          if (!l1Network) throw new Error(`L1 network is not available on ${eraNetwork.value.name}`);
-          const l1ChainId = l1Network.id;
-
-          const l2Provider = await providerStore.requestProvider();
-          let finalizeMigrationParams;
-          try {
-            finalizeMigrationParams = await retry(
-              () =>
-                getSyscoinGatewayMigrationFinalizeParams(
-                  l2Provider,
-                  tokenMigrationInitiationHash.value as `0x${string}`,
-                  eraNetwork.value.id
-                ),
-              {
-                retries: 3,
-                delay: 10_000,
-              }
-            );
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            if (
-              message.includes("proof is not available") ||
-              message.includes("not mined yet") ||
-              message.includes("log is not available yet")
-            ) {
-              setAllowanceStatus.value = "done";
-              approveAllowanceReceipt.value = receipts;
-              return receipts;
-            }
-            throw error;
-          }
-
-          const l1AssetTrackerAddress = (await readContract(wagmiConfig, {
-            chainId: l1ChainId,
-            address: eraNetwork.value.syscoinBridge.bridgehubAddress,
-            abi: SYSCOIN_BRIDGEHUB_ABI,
-            functionName: "chainAssetHandler",
-          })) as Address;
-
-          if (!tokenMigrationFinalizationHash.value) {
-            restoreTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);
-          }
-          if (tokenMigrationFinalizationHash.value) {
-            const migrationFinalizationIsValid = await validateTokenMigrationFinalizationHash(
-              tokenMigrationFinalizationHash.value,
-              l1AssetTrackerAddress,
-              finalizeMigrationParams
-            );
-            if (!migrationFinalizationIsValid) {
-              clearTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);
-            }
-          }
-
-          if (!tokenMigrationFinalizationHash.value) {
-            let l1FinalizationSubmitted = false;
-            try {
-              if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
-              await onboardStore.switchNetworkById(l1ChainId, l1Network.name);
-              setAllowanceStatus.value = "waiting-for-signature";
-              const txFinalizeHash = await writeContract(wagmiConfig, {
-                chainId: l1ChainId,
-                address: l1AssetTrackerAddress,
-                abi: SYSCOIN_L1_ASSET_TRACKER_ABI,
-                functionName: "receiveL1ToGatewayMigrationOnL1",
-                args: [finalizeMigrationParams],
-              });
-
-              l1FinalizationSubmitted = true;
-              if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
-              trackTokenMigrationFinalizationHash(txFinalizeHash, migrationAssetId, l1ChainId, accountAddress);
-              setAllowanceStatus.value = "sending";
-              const finalizationReceipt = await retry(
-                () =>
-                  waitForTransactionReceipt(wagmiConfig, {
-                    chainId: l1ChainId,
-                    hash: txFinalizeHash,
-                    timeout: SYSCOIN_L1_RECEIPT_TIMEOUT,
-                    onReplaced: (replacement) => {
-                      if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return;
-                      if (replacement.reason === "cancelled") {
-                        clearTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);
-                        throw new Error("L1 Gateway migration finalization transaction was cancelled");
-                      }
-                      setAllowanceTransactionHashes.value[setAllowanceTransactionHashes.value.length - 1] =
-                        replacement.transaction.hash;
-                      trackTokenMigrationFinalizationHash(
-                        replacement.transaction.hash,
-                        migrationAssetId,
-                        l1ChainId,
-                        accountAddress
-                      );
-                    },
-                  }),
-                {
-                  retries: 3,
-                  delay: 5_000,
-                }
-              );
-              if (isReceiptReverted(finalizationReceipt.status)) {
-                clearTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);
-                throw new Error("L1 Gateway migration finalization transaction reverted");
-              }
-              receipts.push(finalizationReceipt);
-            } finally {
-              if (l1FinalizationSubmitted) {
-                await onboardStore.switchNetworkById(eraNetwork.value.id, eraNetwork.value.name).catch(() => undefined);
-              }
-            }
-          }
-        }
-
         const migrationRequired = await checkTokenMigrationRequired(migrationAssetId);
         if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
         tokenMigrationRequired.value = migrationRequired;
         if (!migrationRequired) {
           clearTokenMigrationInitiationHash(migrationAssetId, accountAddress);
-          if (eraNetwork.value.l1Network) {
-            clearTokenMigrationFinalizationHash(migrationAssetId, eraNetwork.value.l1Network.id, accountAddress);
-          }
         }
         if (migrationRequired) {
           setAllowanceStatus.value = "done";

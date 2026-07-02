@@ -68,10 +68,6 @@ export const SYSCOIN_L1_NULLIFIER_ABI = parseAbi([
   "function finalizeDeposit((uint256 chainId, uint256 l2BatchNumber, uint256 l2MessageIndex, address l2Sender, uint16 l2TxNumberInBatch, bytes message, bytes32[] merkleProof) finalizeWithdrawalParams)",
 ]);
 
-export const SYSCOIN_L1_ASSET_TRACKER_ABI = parseAbi([
-  "function receiveL1ToGatewayMigrationOnL1((uint256 chainId, uint256 l2BatchNumber, uint256 l2MessageIndex, address l2Sender, uint16 l2TxNumberInBatch, bytes message, bytes32[] merkleProof) finalizeWithdrawalParams)",
-]);
-
 export const SYSCOIN_L1_MESSENGER_ADDRESS = "0x0000000000000000000000000000000000008008";
 export const SYSCOIN_L1_MESSAGE_SENT_ABI = parseAbi([
   "event L1MessageSent(address indexed sender, bytes32 indexed hash, bytes message)",
@@ -270,16 +266,6 @@ export const getSyscoinFinalizeWithdrawalParams = async (
     message: l1MessageSentLog.args.message as Hex,
     merkleProof: proof.proof as readonly Hex[],
   };
-};
-
-export const getSyscoinGatewayMigrationFinalizeParams = async (
-  provider: SyscoinRpcProvider,
-  migrationHash: Hex,
-  chainId: number | bigint
-) => {
-  // SYSCOIN: L1AssetTracker finalizes on L1, so use the default L1-batch-root
-  // proof. MessageRoot proofs are for cross-chain interop verification.
-  return await getSyscoinFinalizeWithdrawalParams(provider, migrationHash, chainId);
 };
 
 export const parseSyscoinBaseTokenWithdrawalMessage = (message: Hex) => {

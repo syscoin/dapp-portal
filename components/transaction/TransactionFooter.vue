@@ -44,13 +44,6 @@
 const onboardStore = useOnboardStore();
 const eraWalletStore = useZkSyncWalletStore();
 
-const props = defineProps({
-  allowDifferentNetwork: {
-    type: Boolean,
-    default: false,
-  },
-});
-
 const { account, isConnectingWallet, connectorName, walletName } = storeToRefs(onboardStore);
 const { isCorrectNetworkSet, switchingNetworkInProgress, switchingNetworkError } = storeToRefs(eraWalletStore);
 const { eraNetwork } = storeToRefs(useZkSyncProviderStore());
@@ -58,7 +51,7 @@ const { eraNetwork } = storeToRefs(useZkSyncProviderStore());
 const buttonStep = computed(() => {
   if (!account.value.address || isConnectingWallet.value) {
     return "connect";
-  } else if (!isCorrectNetworkSet.value && !props.allowDifferentNetwork) {
+  } else if (!isCorrectNetworkSet.value) {
     return "network";
   } else {
     return "continue";
