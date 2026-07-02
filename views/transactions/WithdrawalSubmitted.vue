@@ -37,7 +37,7 @@
           <p>You can claim your withdrawal now.</p>
         </CommonAlert>
         <CommonAlert
-          v-else-if="!props.transaction.token.l1Address && !isCustomBridgeToken"
+          v-else-if="!isSyscoinBridgeNetwork(eraNetwork) && !props.transaction.token.l1Address && !isCustomBridgeToken"
           variant="warning"
           :icon="ExclamationTriangleIcon"
           class="mb-4"
