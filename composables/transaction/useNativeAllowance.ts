@@ -645,6 +645,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
           if (!tokenMigrationFinalizationHash.value) {
             let switchedToL1 = false;
             try {
+              if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
               await onboardStore.switchNetworkById(l1ChainId, l1Network.name);
               switchedToL1 = true;
               setAllowanceStatus.value = "waiting-for-signature";
