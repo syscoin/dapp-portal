@@ -9,6 +9,15 @@ export const portal = {
     alt: "zkSYS Portal",
   },
 };
+export const earn = {
+  title: "zkSYS Earn | Stake SYS and earn zkSYS rewards",
+  description:
+    "Stake native SYS on zkSYS to earn scheduled zkSYS rewards from the 210M supply. Track issuance, weight, and claims on the Syscoin community portal.",
+  previewImg: {
+    src: previewImgSrc,
+    alt: "zkSYS Earn",
+  },
+};
 export const bridge = {
   title: "zkSYS Bridge | Transfer funds between Syscoin and zkSYS",
   description:
