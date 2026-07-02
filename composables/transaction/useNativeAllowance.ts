@@ -649,11 +649,10 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
           }
 
           if (!tokenMigrationFinalizationHash.value) {
-            let switchedToL1 = false;
+            let l1FinalizationSubmitted = false;
             try {
               if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
               await onboardStore.switchNetworkById(l1ChainId, l1Network.name);
-              switchedToL1 = true;
               setAllowanceStatus.value = "waiting-for-signature";
               const txFinalizeHash = await writeContract(wagmiConfig, {
                 chainId: l1ChainId,
@@ -663,6 +662,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
                 args: [finalizeMigrationParams],
               });
 
+              l1FinalizationSubmitted = true;
               if (!preparationIsCurrent(migrationTokenAddress, migrationAssetId)) return stopStalePreparation();
               trackTokenMigrationFinalizationHash(txFinalizeHash, migrationAssetId, l1ChainId, accountAddress);
               setAllowanceStatus.value = "sending";
@@ -699,7 +699,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
               }
               receipts.push(finalizationReceipt);
             } finally {
-              if (switchedToL1) {
+              if (l1FinalizationSubmitted) {
                 await onboardStore.switchNetworkById(eraNetwork.value.id, eraNetwork.value.name).catch(() => undefined);
               }
             }
