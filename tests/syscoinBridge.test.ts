@@ -292,7 +292,7 @@ describe("syscoin bridge encoding", () => {
     assert.deepEqual(params.merkleProof, proof);
   });
 
-  it("requests MessageRoot proofs for Gateway migration finalization", async () => {
+  it("requests L1-batch-root proofs for Gateway migration finalization", async () => {
     const migrationHash = "0xafa6aa8817de22657391adcabfad1b850fb318ddc9477441a7ee6ce6d1fe0f61";
     const message =
       "0xe288a86801000000000000000000000000000000000000000000000000000000000000000000000000000000000000006ebb170f69d886916d9ee9e585ce39e626cbc35d000000000000000000000000000000000000000000000000000000000000dee1";
@@ -334,7 +334,7 @@ describe("syscoin bridge encoding", () => {
 
     const params = await getSyscoinGatewayMigrationFinalizeParams(provider, migrationHash, chainId);
 
-    assert.deepEqual(requestedProofParams, [migrationHash, 0, "messageRoot"]);
+    assert.deepEqual(requestedProofParams, [migrationHash, 0]);
     assert.equal(params.l2BatchNumber, 1930n);
     assert.equal(params.l2Sender, "0x000000000000000000000000000000000001000f");
     assert.equal(params.message, message);

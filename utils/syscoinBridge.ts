@@ -256,9 +256,7 @@ export const getSyscoinFinalizeWithdrawalParams = async (
   );
   if (l2ToL1LogIndex < 0) throw new Error("Withdrawal L2 to L1 log is not available yet");
 
-  const proofParams = proofTarget
-    ? [withdrawalHash, l2ToL1LogIndex, proofTarget]
-    : [withdrawalHash, l2ToL1LogIndex];
+  const proofParams = proofTarget ? [withdrawalHash, l2ToL1LogIndex, proofTarget] : [withdrawalHash, l2ToL1LogIndex];
   const proof = await provider.send("zks_getL2ToL1LogProof", proofParams);
   if (!proof) throw new Error("Withdrawal proof is not available yet");
 
@@ -279,9 +277,9 @@ export const getSyscoinGatewayMigrationFinalizeParams = async (
   migrationHash: Hex,
   chainId: number | bigint
 ) => {
-  // SYSCOIN: L1AssetTracker verifies this path against MessageRoot, not the
-  // default L1 batch root used by withdrawal finalization.
-  return await getSyscoinFinalizeWithdrawalParams(provider, migrationHash, chainId, 0, "messageRoot");
+  // SYSCOIN: L1AssetTracker finalizes on L1, so use the default L1-batch-root
+  // proof. MessageRoot proofs are for cross-chain interop verification.
+  return await getSyscoinFinalizeWithdrawalParams(provider, migrationHash, chainId);
 };
 
 export const parseSyscoinBaseTokenWithdrawalMessage = (message: Hex) => {
