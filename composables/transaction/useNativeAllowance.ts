@@ -38,6 +38,8 @@ const isL2BaseTokenAddress = (address: string | undefined) => {
 const isTransactionHash = (value: unknown): value is Hash => {
   return typeof value === "string" && /^0x[0-9a-fA-F]{64}$/.test(value);
 };
+// SYSCOIN: normalize L1 receipt status shapes before deciding whether to clear
+// persisted Gateway migration finalization hints.
 const isReceiptReverted = (status: unknown) => status === 0 || status === "0x0" || status === "reverted";
 
 type StoredTokenMigrationTransaction = {
@@ -181,6 +183,8 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
     }
   };
 
+  // SYSCOIN: persist the L1 finalization leg separately from the L2 initiation
+  // leg so a refresh does not prompt duplicate Gateway settlement transactions.
   const trackTokenMigrationFinalizationHash = (
     hash: Hash,
     migrationAssetId: string,
@@ -259,6 +263,8 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
     return true;
   };
 
+  // SYSCOIN: a restored L1 hash is trusted only when it exactly matches the
+  // derived Gateway migration finalization calldata for this asset.
   const validateTokenMigrationFinalizationHash = async (
     hash: Hash,
     l1AssetTrackerAddress: Address,
