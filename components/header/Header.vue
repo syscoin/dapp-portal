@@ -35,6 +35,20 @@
           </CommonBadge>
         </transition>
       </NuxtLink>
+      <NuxtLink
+        v-if="isEarnAvailable"
+        class="link-item"
+        :to="{ name: 'earn' }"
+        :class="{ 'router-link-exact-active': routes.earn.includes(route.name?.toString() || '') }"
+      >
+        <CircleStackIcon class="link-icon" aria-hidden="true" />
+        Earn
+        <transition v-bind="TransitionOpacity()">
+          <CommonBadge v-if="earnActionableCount">
+            {{ earnActionableCount }}
+          </CommonBadge>
+        </transition>
+      </NuxtLink>
     </div>
     <div class="right-side">
       <HeaderNetworkDropdown class="network-dropdown" />
@@ -70,6 +84,7 @@ import {
   ArrowsRightLeftIcon,
   ArrowsUpDownIcon,
   Bars3Icon,
+  CircleStackIcon,
   MoonIcon,
   SunIcon,
   WalletIcon,
@@ -80,11 +95,27 @@ const route = useRoute();
 const routes = {
   bridge: ["bridge", "bridge-withdraw"],
   assets: ["assets", "balances", "receive-methods", "receive", "send-methods", "send"],
+  earn: ["earn", "earn-stake", "earn-withdraw"],
 };
 
 const onboardStore = useOnboardStore();
 const { isConnected } = storeToRefs(onboardStore);
 const { withdrawalsAvailableForClaiming } = storeToRefs(useZkSyncWithdrawalsStore());
+
+// SYSCOIN: surface actionable Earn items (activatable weight, claimable
+// rewards) as a nav badge; reads are cached in the store.
+const earnStore = useZkSysEarnStore();
+const { isEarnAvailable, actionableCount: earnActionableCount } = storeToRefs(earnStore);
+const fetchEarnActionable = () => {
+  if (!isEarnAvailable.value || !isConnected.value) return;
+  earnStore.requestStaticConfig().catch(() => undefined);
+  earnStore.requestNetworkStats().catch(() => undefined);
+  earnStore.requestUserPosition().catch(() => undefined);
+};
+fetchEarnActionable();
+onboardStore.subscribeOnAccountChange(() => {
+  nextTick(() => fetchEarnActionable());
+});
 
 const mobileMainNavigationOpened = ref(false);
 const mobileAccountNavigationOpened = ref(false);

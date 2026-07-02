@@ -39,6 +39,12 @@
               </template>
               <template #default>Send</template>
             </CommonButton>
+            <CommonButton v-if="isEarnAvailable" variant="primary" as="RouterLink" :to="{ name: 'earn' }">
+              <template #icon>
+                <CircleStackIcon aria-hidden="true" />
+              </template>
+              <template #default>Earn</template>
+            </CommonButton>
           </CommonButtonGroup>
         </div>
       </CommonContentBlock>
@@ -125,6 +131,7 @@ import {
   ArrowTopRightOnSquareIcon,
   ArrowUpRightIcon,
   BanknotesIcon,
+  CircleStackIcon,
   QrCodeIcon,
 } from "@heroicons/vue/24/outline";
 import { mainnet } from "viem/chains";
@@ -140,6 +147,8 @@ const { account, isConnected } = storeToRefs(onboardStore);
 const { balance, balanceInProgress, balanceError } = storeToRefs(walletStore);
 const { destinations } = storeToRefs(useDestinationsStore());
 const { eraNetwork } = storeToRefs(useZkSyncProviderStore());
+// SYSCOIN: expose the Earn section from the assets action row.
+const { isEarnAvailable } = storeToRefs(useZkSysEarnStore());
 
 const { ecosystemBannerVisible } = useEcosystemBanner();
 

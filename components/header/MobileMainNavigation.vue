@@ -49,6 +49,21 @@
               </div>
             </template>
           </DestinationItem>
+          <DestinationItem v-if="isEarnAvailable" label="Earn" as="RouterLink" :to="{ name: 'earn' }" size="sm">
+            <template #image>
+              <DestinationIconContainer>
+                <CircleStackIcon aria-hidden="true" />
+              </DestinationIconContainer>
+            </template>
+            <template #label>
+              <div class="flex items-center gap-2">
+                <span>Earn</span>
+                <CommonBadge v-if="earnActionableCount">
+                  {{ earnActionableCount }}
+                </CommonBadge>
+              </div>
+            </template>
+          </DestinationItem>
         </CommonCardWithLineButtons>
 
         <TypographyCategoryLabel size="sm">Theme</TypographyCategoryLabel>
@@ -117,6 +132,7 @@ import {
   ArrowsUpDownIcon,
   CheckIcon,
   ChevronRightIcon,
+  CircleStackIcon,
   MoonIcon,
   SunIcon,
   WalletIcon,
@@ -143,6 +159,8 @@ const emit = defineEmits<{
 const route = useRoute();
 
 const { withdrawalsAvailableForClaiming } = storeToRefs(useZkSyncWithdrawalsStore());
+// SYSCOIN: mirror the desktop nav's Earn entry and actionable badge.
+const { isEarnAvailable, actionableCount: earnActionableCount } = storeToRefs(useZkSysEarnStore());
 
 const TabsTransition = computed(() =>
   openedTab.value === "main" ? TransitionSlideOutToRight : TransitionSlideOutToLeft
