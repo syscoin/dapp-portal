@@ -11,8 +11,9 @@ import {
   L2_SYSTEM_CONTEXT_ADDRESS,
 } from "@/utils/constants";
 import {
-  SYSCOIN_BRIDGEHUB_ABI,
+  SYSCOIN_L1_ASSET_ROUTER_ABI,
   SYSCOIN_L1_ASSET_TRACKER_ABI,
+  SYSCOIN_L1_NATIVE_TOKEN_VAULT_ABI,
   SYSCOIN_L1_RECEIPT_TIMEOUT,
   SYSCOIN_L2_ASSET_TRACKER_ABI,
   SYSCOIN_L2_SYSTEM_CONTEXT_ABI,
@@ -295,6 +296,25 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
       functionName: "currentSettlementLayerChainId",
       chainId: eraNetwork.value.id,
     })) as bigint;
+  };
+
+  const getL1AssetTrackerAddress = async (l1ChainId: number) => {
+    if (!isSyscoinBridgeNetwork(eraNetwork.value)) {
+      throw new Error(`Syscoin bridge is not available on ${eraNetwork.value.name}`);
+    }
+    const l1NativeTokenVaultAddress = (await readContract(wagmiConfig, {
+      chainId: l1ChainId,
+      address: eraNetwork.value.syscoinBridge.sharedBridgeAddress,
+      abi: SYSCOIN_L1_ASSET_ROUTER_ABI,
+      functionName: "nativeTokenVault",
+    })) as Address;
+
+    return (await readContract(wagmiConfig, {
+      chainId: l1ChainId,
+      address: l1NativeTokenVaultAddress,
+      abi: SYSCOIN_L1_NATIVE_TOKEN_VAULT_ABI,
+      functionName: "l1AssetTracker",
+    })) as Address;
   };
 
   const checkTokenMigrationRequired = async (checkedAssetId: string) => {
@@ -627,12 +647,7 @@ export const useNativeAllowance = (tokenAddress: Ref<string | undefined>, amount
             throw error;
           }
 
-          const l1AssetTrackerAddress = (await readContract(wagmiConfig, {
-            chainId: l1ChainId,
-            address: eraNetwork.value.syscoinBridge.bridgehubAddress,
-            abi: SYSCOIN_BRIDGEHUB_ABI,
-            functionName: "chainAssetHandler",
-          })) as Address;
+          const l1AssetTrackerAddress = await getL1AssetTrackerAddress(l1ChainId);
 
           if (!tokenMigrationFinalizationHash.value) {
             restoreTokenMigrationFinalizationHash(migrationAssetId, l1ChainId, accountAddress);

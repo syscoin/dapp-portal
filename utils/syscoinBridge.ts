@@ -68,6 +68,10 @@ export const SYSCOIN_L1_NULLIFIER_ABI = parseAbi([
   "function finalizeDeposit((uint256 chainId, uint256 l2BatchNumber, uint256 l2MessageIndex, address l2Sender, uint16 l2TxNumberInBatch, bytes message, bytes32[] merkleProof) finalizeWithdrawalParams)",
 ]);
 
+export const SYSCOIN_L1_ASSET_ROUTER_ABI = parseAbi(["function nativeTokenVault() view returns (address)"]);
+
+export const SYSCOIN_L1_NATIVE_TOKEN_VAULT_ABI = parseAbi(["function l1AssetTracker() view returns (address)"]);
+
 export const SYSCOIN_L1_ASSET_TRACKER_ABI = parseAbi([
   "function receiveL1ToGatewayMigrationOnL1((uint256 chainId, uint256 l2BatchNumber, uint256 l2MessageIndex, address l2Sender, uint16 l2TxNumberInBatch, bytes message, bytes32[] merkleProof) finalizeWithdrawalParams)",
 ]);
