@@ -10,7 +10,7 @@
     <EarnStatCard label="zkSYS supply" :loading="loading" :value="supplyDisplay">
       <template #sub>
         <div class="supply-progress">
-          <div class="supply-progress-bar" :style="{ width: supplyPercent }" />
+          <div class="supply-progress-bar" :style="{ width: supplyBarWidth }" />
         </div>
         <span>{{ supplyPercent }} of {{ maxSupplyDisplay }} cap minted</span>
       </template>
@@ -83,6 +83,15 @@ const maxSupplyDisplay = computed(() => zkSysFormatTokenCompact(staticConfig.val
 const supplyPercent = computed(() =>
   zkSysFormatShare(networkStats.value?.tokenTotalSupply ?? 0n, staticConfig.value?.maxSupply ?? 0n)
 );
+// zkSysFormatShare can return "<0.01%", which is not valid CSS — keep the bar
+// width numeric and clamped separately from the display string.
+const supplyBarWidth = computed(() => {
+  const supply = networkStats.value?.tokenTotalSupply ?? 0n;
+  const max = staticConfig.value?.maxSupply ?? 0n;
+  if (max === 0n) return "0%";
+  const percent = Math.min(100, Number((supply * 1_000_000n) / max) / 10_000);
+  return `${percent}%`;
+});
 
 const totalStakedDisplay = computed(() => zkSysFormatTokenCompact(networkStats.value?.totalStaked ?? 0n));
 const totalWeightDisplay = computed(() => zkSysFormatTokenCompact(networkStats.value?.totalWeight ?? 0n));
