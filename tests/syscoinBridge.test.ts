@@ -26,6 +26,7 @@ import {
   encodeSyscoinErc20Deposit,
   encodeSyscoinTsysDeposit,
   getSyscoinFinalizeWithdrawalParams,
+  getSyscoinGatewayMigrationFinalizeParams,
   getSyscoinL2FeeOverrides,
   parseSyscoinAssetRouterWithdrawalMessage,
   parseSyscoinBaseTokenWithdrawalMessage,
@@ -192,10 +193,10 @@ describe("syscoin bridge encoding", () => {
   it("builds matching Syscoin withdrawal transaction requests", () => {
     const baseTokenTx = buildSyscoinWithdrawTransaction({
       l1Receiver: receiver,
-      l2Token: "0x000000000000000000000000000000000000800A",
+      l2Token: "0x000000000000000000000000000000000000800a",
       amount,
     });
-    assert.equal(baseTokenTx.to, "0x000000000000000000000000000000000000800A");
+    assert.equal(baseTokenTx.to, "0x000000000000000000000000000000000000800a");
     assert.equal(baseTokenTx.value, amount);
     assert.equal(baseTokenTx.data.slice(0, 10), toFunctionSelector("withdraw(address)"));
 
@@ -228,7 +229,7 @@ describe("syscoin bridge encoding", () => {
   it("builds Gateway migration transaction requests", () => {
     const migrationTx = buildSyscoinGatewayMigrationTransaction(assetId);
 
-    assert.equal(migrationTx.to, "0x000000000000000000000000000000000001000F");
+    assert.equal(migrationTx.to, "0x000000000000000000000000000000000001000f");
     assert.equal(migrationTx.value, 0n);
     assert.equal(migrationTx.data.slice(0, 10), toFunctionSelector("initiateL1ToGatewayMigrationOnL2(bytes32)"));
     assert.ok(migrationTx.data.includes(assetId.slice(2)));
@@ -289,6 +290,54 @@ describe("syscoin bridge encoding", () => {
     assert.equal(params.l2TxNumberInBatch, 3);
     assert.equal(params.message, message);
     assert.deepEqual(params.merkleProof, proof);
+  });
+
+  it("requests MessageRoot proofs for Gateway migration finalization", async () => {
+    const migrationHash = "0xafa6aa8817de22657391adcabfad1b850fb318ddc9477441a7ee6ce6d1fe0f61";
+    const message =
+      "0xe288a86801000000000000000000000000000000000000000000000000000000000000000000000000000000000000006ebb170f69d886916d9ee9e585ce39e626cbc35d000000000000000000000000000000000000000000000000000000000000dee1";
+    const messageHash = "0x2543674ae90cf0ebb96202a9e76cc62288f34f52ca1de0200353c40604b61e5d";
+    const proof = ["0x2222222222222222222222222222222222222222222222222222222222222222"];
+    let requestedProofParams: unknown[] | undefined;
+    const provider = {
+      send: async (method: string, params?: unknown[]) => {
+        if (method === "eth_getTransactionReceipt") {
+          return {
+            transactionIndex: "0x0",
+            logs: [
+              {
+                address: "0x0000000000000000000000000000000000008008",
+                topics: [
+                  toEventSelector("L1MessageSent(address,bytes32,bytes)"),
+                  "0x000000000000000000000000000000000000000000000000000000000001000f",
+                  messageHash,
+                ],
+                data: encodeAbiParameters([{ type: "bytes" }], [message]),
+              },
+            ],
+            l2ToL1Logs: [
+              {
+                sender: "0x0000000000000000000000000000000000008008",
+                key: "0x000000000000000000000000000000000000000000000000000000000001000f",
+                value: messageHash,
+              },
+            ],
+          };
+        }
+        if (method === "zks_getL2ToL1LogProof") {
+          requestedProofParams = params;
+          return { batchNumber: 1930, id: 0, proof };
+        }
+        throw new Error(`Unexpected RPC method: ${method}`);
+      },
+    };
+
+    const params = await getSyscoinGatewayMigrationFinalizeParams(provider, migrationHash, chainId);
+
+    assert.deepEqual(requestedProofParams, [migrationHash, 0, "messageRoot"]);
+    assert.equal(params.l2BatchNumber, 1930n);
+    assert.equal(params.l2Sender, "0x000000000000000000000000000000000001000f");
+    assert.equal(params.message, message);
   });
 
   it("parses packed base-token withdrawal messages", () => {
