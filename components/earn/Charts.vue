@@ -41,17 +41,17 @@
         <CommonEmptyBlock v-else class="chart-empty">No reward distributions yet</CommonEmptyBlock>
       </CommonContentBlock>
 
-      <!-- Minted vs burned -->
+      <!-- Total reward weight -->
       <CommonContentBlock class="chart-block">
         <div class="chart-header">
           <div>
-            <div class="chart-title">Minted vs burned</div>
-            <div class="chart-subtitle">Claims mint zkSYS; gas paid via the Pali paymaster burns it</div>
+            <div class="chart-title">Total reward weight</div>
+            <div class="chart-subtitle">Stake and sentry weight competing for each period's rewards</div>
           </div>
         </div>
-        <EarnChart v-if="supplyData" type="bar" :data="supplyData" :height="200" />
-        <CommonContentLoader v-else-if="supplyFlowsInProgress" class="chart-loader" />
-        <CommonEmptyBlock v-else class="chart-empty">No mint or burn activity yet</CommonEmptyBlock>
+        <EarnChart v-if="weightData" type="line" :data="weightData" :options="weightOptions" :height="200" />
+        <CommonContentLoader v-else-if="weightHistoryInProgress" class="chart-loader" />
+        <CommonEmptyBlock v-else class="chart-empty">No weight activity indexed yet</CommonEmptyBlock>
       </CommonContentBlock>
     </div>
   </div>
@@ -66,7 +66,6 @@ const ISSUANCE_CHART_YEARS_MS = 12 * 365 * 24 * 60 * 60 * 1000;
 const PRIMARY = "#205efe";
 const PRIMARY_LIGHT = "#5f89ff";
 const SUCCESS = "#00CC66";
-const ERROR = "#FF6666";
 const WARNING = "#E5AF00";
 
 const earnStore = useZkSysEarnStore();
@@ -82,9 +81,9 @@ const {
   rewardsHistory,
   rewardsHistoryInProgress,
   requestRewardsHistory,
-  supplyFlows,
-  supplyFlowsInProgress,
-  requestSupplyFlows,
+  weightHistory,
+  weightHistoryInProgress,
+  requestWeightHistory,
 } = useEarnCharts();
 
 onMounted(() => {
@@ -92,7 +91,7 @@ onMounted(() => {
   // issuance chart still render if Blockscout is unavailable.
   requestStakingHistory().catch(() => undefined);
   requestRewardsHistory().catch(() => undefined);
-  requestSupplyFlows().catch(() => undefined);
+  requestWeightHistory().catch(() => undefined);
 });
 
 const formatShortDate = (ms: number) => new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -239,28 +238,45 @@ const rewardsData = computed<ChartData<"bar"> | undefined>(() => {
   };
 });
 
-// --- Minted vs burned ---
-const supplyData = computed<ChartData<"bar"> | undefined>(() => {
-  const points = supplyFlows.value;
-  if (!points || !points.length) return undefined;
+// --- Total reward weight ---
+const weightData = computed<ChartData<"line"> | undefined>(() => {
+  const points = weightHistory.value;
+  if (!points || points.length < 2) return undefined;
   return {
-    labels: points.map((point) => point.day.slice(5)),
     datasets: [
       {
-        label: "Minted",
-        data: points.map((point) => point.minted),
-        backgroundColor: SUCCESS,
-        borderRadius: 6,
-      },
-      {
-        label: "Burned (gas)",
-        data: points.map((point) => point.burned),
-        backgroundColor: ERROR,
-        borderRadius: 6,
+        label: "Total reward weight",
+        data: points,
+        borderColor: PRIMARY,
+        backgroundColor: "rgba(32, 94, 254, 0.12)",
+        fill: true,
+        stepped: true,
+        pointRadius: 0,
+        borderWidth: 2,
       },
     ],
   };
 });
+const weightOptions = computed<ChartOptions>(() => ({
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      callbacks: {
+        title: (items: { parsed: { x: number } }[]) =>
+          items.length ? new Date(items[0].parsed.x).toLocaleString() : "",
+        label: (item: { parsed: { y: number } }) => ` ${formatTooltipValue(item.parsed.y)} total weight`,
+      },
+    },
+  },
+  scales: {
+    x: {
+      type: "linear",
+      ticks: {
+        callback: (value: string | number) => formatShortDate(Number(value)),
+      },
+    },
+  },
+}));
 </script>
 
 <style lang="scss" scoped>

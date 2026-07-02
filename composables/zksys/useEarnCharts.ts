@@ -1,14 +1,18 @@
 import { $fetch } from "ofetch";
 import { decodeEventLog, formatUnits, getAddress, isAddressEqual, zeroAddress, type Address, type Hex } from "viem";
 
-import { ZKSYS_ISSUER_ABI, ZKSYS_STAKING_VAULT_ABI, ZKSYS_TOKEN_ABI } from "@/data/abis/zksysEarnAbi";
+import {
+  ZKSYS_ISSUER_ABI,
+  ZKSYS_REWARD_WEIGHT_REGISTRY_ABI,
+  ZKSYS_STAKING_VAULT_ABI,
+  ZKSYS_TOKEN_ABI,
+} from "@/data/abis/zksysEarnAbi";
 import { zkSysCumulativeScheduledRewards, zkSysPeriodAt } from "@/utils/zksysEarn";
 
 import type { ZkSysEarnStaticConfig } from "@/store/zksys/earn";
 
 export type TimeSeriesPoint = { x: number; y: number };
 export type PeriodBarPoint = { period: number; distributed: number; claimed: number };
-export type DailyFlowPoint = { day: string; minted: number; burned: number };
 
 export type IssuanceSchedule = {
   /** Cumulative scheduled supply, monthly resolution */
@@ -237,43 +241,87 @@ export default () => {
     { cache: 60_000 }
   );
 
-  /** zkSYS minted (claims) vs burned (gas via Pali paymaster) per day. */
+  /**
+   * Total reward weight over time, from registry WeightUpdated events. Walks
+   * newest-first from the live totalWeight so a truncated log window still
+   * yields exact values for the covered range.
+   */
   const {
-    result: supplyFlows,
-    inProgress: supplyFlowsInProgress,
-    error: supplyFlowsError,
-    execute: requestSupplyFlows,
-  } = usePromise<DailyFlowPoint[]>(
+    result: weightHistory,
+    inProgress: weightHistoryInProgress,
+    error: weightHistoryError,
+    execute: requestWeightHistory,
+  } = usePromise<TimeSeriesPoint[]>(
     async () => {
       const contracts = earnStore.earnContracts;
       const apiUrl = l2BlockscoutApiUrl.value;
       if (!contracts || !apiUrl) return [];
+      await earnStore.requestNetworkStats();
+      const currentTotal = earnStore.networkStats?.totalWeight ?? 0n;
 
-      const logs = await resolveLogTimestamps(await fetchContractLogs(apiUrl, contracts.token));
-      const byDay = new Map<string, { minted: number; burned: number }>();
+      const logs = await resolveLogTimestamps(await fetchContractLogs(apiUrl, contracts.rewardWeightRegistry));
+      type WeightEvent = { timestampMs: number; delta: bigint };
+      const events: WeightEvent[] = [];
       for (const log of logs) {
         if (!log.timestampMs) continue;
         try {
+          const decoded = decodeEventLog({
+            abi: ZKSYS_REWARD_WEIGHT_REGISTRY_ABI,
+            data: log.data,
+            topics: log.topics,
+          });
+          if (decoded.eventName === "WeightUpdated") {
+            events.push({ timestampMs: log.timestampMs, delta: decoded.args.newWeight - decoded.args.oldWeight });
+          }
+        } catch {
+          // Not a registry weight event (e.g. queue or proxy admin log); skip.
+        }
+      }
+
+      // Newest first: subtract deltas to reconstruct running totals backwards.
+      events.sort((a, b) => b.timestampMs - a.timestampMs);
+      let running = currentTotal;
+      const points: TimeSeriesPoint[] = [{ x: Date.now(), y: toTokens(currentTotal) }];
+      for (const event of events) {
+        points.push({ x: event.timestampMs, y: toTokens(running) });
+        running -= event.delta;
+      }
+      if (events.length) {
+        points.push({ x: events[events.length - 1].timestampMs, y: toTokens(running) });
+      }
+      return points.reverse();
+    },
+    { cache: 60_000 }
+  );
+
+  /**
+   * Cumulative zkSYS burned (gas paid via the Pali paymaster), summed from
+   * token Transfer events to the zero address. Bounded by the indexed log
+   * window, so treat it as "burned so far in the covered range".
+   */
+  const {
+    result: burnedTotal,
+    inProgress: burnedTotalInProgress,
+    error: burnedTotalError,
+    execute: requestBurnedTotal,
+  } = usePromise<bigint>(
+    async () => {
+      const contracts = earnStore.earnContracts;
+      const apiUrl = l2BlockscoutApiUrl.value;
+      if (!contracts || !apiUrl) return 0n;
+
+      const logs = await fetchContractLogs(apiUrl, contracts.token);
+      let burned = 0n;
+      for (const log of logs) {
+        try {
           const decoded = decodeEventLog({ abi: ZKSYS_TOKEN_ABI, data: log.data, topics: log.topics });
           if (decoded.eventName !== "Transfer") continue;
-          const isMint = isAddressEqual(decoded.args.from, zeroAddress);
-          const isBurn = isAddressEqual(decoded.args.to, zeroAddress);
-          if (!isMint && !isBurn) continue;
-
-          const day = new Date(log.timestampMs).toISOString().slice(0, 10);
-          let entry = byDay.get(day);
-          if (!entry) {
-            entry = { minted: 0, burned: 0 };
-            byDay.set(day, entry);
-          }
-          if (isMint) entry.minted += toTokens(decoded.args.value);
-          else entry.burned += toTokens(decoded.args.value);
+          if (isAddressEqual(decoded.args.to, zeroAddress)) burned += decoded.args.value;
         } catch {
           // Not an ERC20 transfer (e.g. votes/roles event); skip.
         }
       }
-
-      return [...byDay.entries()].map(([day, entry]) => ({ day, ...entry })).sort((a, b) => a.day.localeCompare(b.day));
+      return burned;
     },
     { cache: 60_000 }
   );
@@ -291,9 +339,14 @@ export default () => {
     rewardsHistoryError,
     requestRewardsHistory,
 
-    supplyFlows,
-    supplyFlowsInProgress,
-    supplyFlowsError,
-    requestSupplyFlows,
+    weightHistory,
+    weightHistoryInProgress,
+    weightHistoryError,
+    requestWeightHistory,
+
+    burnedTotal,
+    burnedTotalInProgress,
+    burnedTotalError,
+    requestBurnedTotal,
   };
 };

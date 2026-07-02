@@ -12,7 +12,7 @@
         <div class="supply-progress">
           <div class="supply-progress-bar" :style="{ width: supplyBarWidth }" />
         </div>
-        <span>{{ supplyPercent }} of {{ maxSupplyDisplay }} cap minted</span>
+        <span>{{ supplyPercent }} of {{ maxSupplyDisplay }} cap minted{{ burnedSuffix }}</span>
       </template>
     </EarnStatCard>
     <EarnStatCard
@@ -43,6 +43,7 @@
 <script lang="ts" setup>
 import { ClockIcon } from "@heroicons/vue/24/outline";
 
+import useEarnCharts from "@/composables/zksys/useEarnCharts";
 import { zkSysFormatDuration, zkSysFormatShare, zkSysFormatTokenCompact, zkSysPeriodEmission } from "@/utils/zksysEarn";
 
 const earnStore = useZkSysEarnStore();
@@ -58,6 +59,18 @@ const { stop: stopClock } = useInterval(() => {
   now.value = Date.now();
 }, 30_000);
 onBeforeUnmount(stopClock);
+
+// Cumulative zkSYS burned as gas via the Pali paymaster; best-effort from
+// Blockscout logs and only shown once there is something to show.
+const { burnedTotal, requestBurnedTotal } = useEarnCharts();
+onMounted(() => {
+  requestBurnedTotal().catch(() => undefined);
+});
+const burnedSuffix = computed(() => {
+  const burned = burnedTotal.value ?? 0n;
+  if (burned === 0n) return "";
+  return ` · ${zkSysFormatTokenCompact(burned)} burned as gas`;
+});
 
 const currentPeriodDisplay = computed(() => networkStats.value?.currentPeriod.toString() ?? "0");
 const periodCloseSub = computed(() => {
