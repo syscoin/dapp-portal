@@ -1,5 +1,15 @@
 <template>
-  <component :is="as" type="button" class="default-button" :class="[`size-${size}`, `variant-${variant}`]">
+  <component
+    :is="as"
+    type="button"
+    class="default-button"
+    :class="[`size-${size}`, `variant-${variant}`]"
+    :aria-disabled="isAriaDisabled ? 'true' : undefined"
+    :tabindex="disabledLinkTabIndex"
+    @click.capture="preventDisabledActivation"
+    @keydown.enter.capture="preventDisabledActivation"
+    @keydown.space.capture="preventDisabledActivation"
+  >
     <span v-if="$slots.icon" class="icon-container">
       <slot name="icon" />
     </span>
@@ -8,7 +18,7 @@
 </template>
 
 <script lang="ts" setup>
-defineProps({
+const props = defineProps({
   as: {
     type: [String, Object] as PropType<string | Component>,
     default: "button",
@@ -21,14 +31,34 @@ defineProps({
     type: String as PropType<"xs" | "sm" | "md">,
     default: "md",
   },
+  ariaDisabled: {
+    type: [Boolean, String] as PropType<boolean | "true" | "false">,
+    default: false,
+  },
 });
+
+const isAriaDisabled = computed(() => props.ariaDisabled === true || props.ariaDisabled === "true");
+const disabledLinkTabIndex = computed(() => (isAriaDisabled.value ? -1 : undefined));
+
+const preventDisabledActivation = (event: MouseEvent | KeyboardEvent) => {
+  if (!isAriaDisabled.value) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+};
 </script>
 
 <style lang="scss">
 .default-button {
-  @apply flex items-center justify-center text-center backdrop-blur-sm transition-colors wrap-balance;
+  @apply flex items-center justify-center border border-transparent text-center backdrop-blur-sm transition-colors wrap-balance;
   &:is(label) {
     @apply cursor-pointer;
+  }
+  &:enabled,
+  &:is(a, label) {
+    &:not([aria-disabled="true"]) {
+      @apply cursor-pointer;
+    }
   }
   &.size- {
     &xs {
@@ -43,20 +73,20 @@ defineProps({
   }
   &.variant- {
     &default {
-      @apply bg-neutral-100 dark:bg-neutral-900;
+      @apply border-neutral-300 bg-neutral-100 text-neutral-900 shadow-sm dark:border-neutral-700 dark:bg-neutral-900 dark:text-white;
       &:enabled,
       &:is(a, label) {
         &:not([aria-disabled="true"]) {
-          @apply hover:bg-neutral-200 dark:hover:bg-neutral-800 dark:focus-visible:bg-neutral-800;
+          @apply hover:border-neutral-400 hover:bg-neutral-200 dark:hover:border-neutral-600 dark:hover:bg-neutral-800 dark:focus-visible:bg-neutral-800;
         }
       }
     }
     &light {
-      @apply bg-neutral-200 transition disabled:opacity-70 dark:bg-neutral-800;
+      @apply border-neutral-300 bg-neutral-200 text-neutral-900 shadow-sm transition dark:border-neutral-700 dark:bg-neutral-800 dark:text-white;
       &:enabled,
       &:is(a, label) {
         &:not([aria-disabled="true"]) {
-          @apply hover:bg-neutral-300 dark:hover:bg-neutral-700 dark:focus-visible:bg-neutral-700;
+          @apply hover:border-neutral-400 hover:bg-neutral-300 dark:hover:border-neutral-600 dark:hover:bg-neutral-700 dark:focus-visible:bg-neutral-700;
         }
       }
     }
@@ -67,10 +97,6 @@ defineProps({
         &:not([aria-disabled="true"]) {
           @apply hover:bg-primary-300;
         }
-      }
-      &:disabled,
-      &[aria-disabled="true"] {
-        @apply bg-opacity-50 dark:bg-neutral-800 dark:bg-opacity-50;
       }
     }
     &error {
@@ -91,6 +117,10 @@ defineProps({
         }
       }
     }
+  }
+  &:disabled,
+  &[aria-disabled="true"] {
+    @apply pointer-events-none cursor-not-allowed border-transparent bg-neutral-200 text-neutral-500 shadow-none dark:bg-neutral-800 dark:text-neutral-500;
   }
   .icon-container {
     @apply -ml-0.5 mr-2 inline-flex items-center;

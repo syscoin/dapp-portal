@@ -69,13 +69,13 @@ const inputted = computed({
 
 <style lang="scss">
 .small-input-container {
-  @apply flex h-12 w-full items-center rounded-3xl bg-gray-input px-4 py-3 transition-colors dark:bg-neutral-900;
+  @apply flex h-12 w-full items-center rounded-3xl border border-transparent bg-gray-input px-4 py-3 text-neutral-950 transition-colors dark:border-white/10 dark:bg-neutral-800 dark:text-white;
   &.focused,
   &:hover {
-    @apply bg-gray-input-focus dark:bg-neutral-800;
+    @apply border-neutral-300 bg-gray-input-focus dark:border-white/20 dark:bg-neutral-700;
 
     .small-input-clear-button {
-      @apply bg-gray-400 dark:bg-neutral-500;
+      @apply bg-gray-400 dark:bg-neutral-600;
     }
   }
 
@@ -87,16 +87,16 @@ const inputted = computed({
     }
   }
   .small-input-field {
-    @apply mx-2 w-full truncate rounded-none border-none bg-transparent outline-none placeholder:text-gray-secondary dark:placeholder:text-neutral-400;
+    @apply mx-2 w-full truncate rounded-none border-none bg-transparent outline-none placeholder:text-gray-secondary dark:placeholder:text-neutral-300;
   }
   .small-input-clear-button {
-    @apply block aspect-square h-6 w-6 self-end rounded-full bg-gray-300 p-1 transition-all dark:bg-neutral-800;
+    @apply flex h-6 w-6 flex-none items-center justify-center rounded-full bg-gray-300 transition-all dark:bg-neutral-600;
     &:hover {
-      @apply bg-gray-500 dark:bg-neutral-600;
+      @apply bg-gray-500 dark:bg-neutral-500;
     }
 
     .small-input-clear-button-icon {
-      @apply h-full w-full text-white;
+      @apply h-4 w-4 text-white;
     }
   }
 }

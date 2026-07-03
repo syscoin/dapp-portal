@@ -25,7 +25,7 @@
         />
 
         <CommonAlert
-          variant="neutral"
+          variant="info"
           size="sm"
           :icon="InformationCircleIcon"
           class="mb-block-padding-1/2 sm:mb-block-gap"
