@@ -60,7 +60,7 @@ const { stop: stopClock } = useInterval(() => {
 }, 30_000);
 onBeforeUnmount(stopClock);
 
-// Cumulative zkSYS burned as gas via the Pali paymaster; best-effort from
+// Cumulative zkSYS burned as gas (gas-tank surplus burns); best-effort from
 // Blockscout logs and only shown once there is something to show.
 const { burnedTotal, requestBurnedTotal } = useEarnCharts();
 onMounted(() => {

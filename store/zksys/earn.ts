@@ -1,6 +1,7 @@
 import { createPublicClient, http, isAddress, type Address, type PublicClient } from "viem";
 
 import {
+  ZKSYS_GAS_TANK_ABI,
   ZKSYS_ISSUER_ABI,
   ZKSYS_MEMBERSHIP_REGISTRY_ABI,
   ZKSYS_REWARD_WEIGHT_REGISTRY_ABI,
@@ -28,6 +29,16 @@ export type ZkSysEarnNetworkStats = {
   lastDistributedPeriod: bigint;
   tokenTotalSupply: bigint;
   activeSentryNodeCount: bigint;
+};
+
+export type ZkSysGasTankStats = {
+  totalCredits: bigint;
+  surplus: bigint;
+};
+
+export type ZkSysGasTankPosition = {
+  credit: bigint;
+  allowance: bigint;
 };
 
 export type ZkSysEarnUserPosition = {
@@ -236,12 +247,76 @@ export const useZkSysEarnStore = defineStore("zkSysEarn", () => {
     { cache: 15_000 }
   );
 
+  // --- Gas tank (prepaid zkSYS gas, replaces the retired paymaster path) ---
+  const gasTankAddress = computed(() => earnContracts.value?.gasTank);
+
+  // SYSCOIN: the tank address is pre-computed (deterministic CREATE2), so gate
+  // every gas-tank feature on code actually existing at that address.
+  const { result: gasTankDeployed, execute: requestGasTankDeployed } = usePromise<boolean>(async () => {
+    const address = gasTankAddress.value;
+    if (!address) return false;
+    const code = await getEarnPublicClient().getCode({ address });
+    return !!code && code !== "0x";
+  });
+  const isGasTankAvailable = computed(() => !!gasTankAddress.value && gasTankDeployed.value === true);
+
+  const {
+    result: gasTankStats,
+    inProgress: gasTankStatsInProgress,
+    error: gasTankStatsError,
+    execute: requestGasTankStats,
+  } = usePromise<ZkSysGasTankStats | undefined>(
+    async () => {
+      const address = gasTankAddress.value;
+      if (!address || !(await requestGasTankDeployed())) return undefined;
+      const client = getEarnPublicClient();
+      const [totalCredits, surplus] = await Promise.all([
+        client.readContract({ address, abi: ZKSYS_GAS_TANK_ABI, functionName: "totalCredits" }),
+        client.readContract({ address, abi: ZKSYS_GAS_TANK_ABI, functionName: "surplus" }),
+      ]);
+      return { totalCredits, surplus };
+    },
+    { cache: 15_000 }
+  );
+
+  const {
+    result: gasTankPosition,
+    inProgress: gasTankPositionInProgress,
+    error: gasTankPositionError,
+    execute: requestGasTankPosition,
+    reset: resetGasTankPosition,
+  } = usePromise<ZkSysGasTankPosition | undefined>(
+    async () => {
+      const accountAddress = account.value.address;
+      if (!accountAddress || !isAddress(accountAddress)) return undefined;
+      const address = gasTankAddress.value;
+      if (!address || !(await requestGasTankDeployed())) return undefined;
+
+      const contracts = requireContracts();
+      const client = getEarnPublicClient();
+      const owner = accountAddress as Address;
+      const [credit, allowance] = await Promise.all([
+        client.readContract({ address, abi: ZKSYS_GAS_TANK_ABI, functionName: "creditOf", args: [owner] }),
+        client.readContract({
+          address: contracts.token,
+          abi: ZKSYS_TOKEN_ABI,
+          functionName: "allowance",
+          args: [owner, address],
+        }),
+      ]);
+      return { credit, allowance };
+    },
+    { cache: 15_000 }
+  );
+
   const refresh = async () => {
     if (!isEarnAvailable.value) return;
     await Promise.all([
       requestStaticConfig(),
       requestNetworkStats({ force: true }),
       requestUserPosition({ force: true }),
+      requestGasTankStats({ force: true }),
+      requestGasTankPosition({ force: true }),
     ]);
   };
 
@@ -314,6 +389,7 @@ export const useZkSysEarnStore = defineStore("zkSysEarn", () => {
 
   onboardStore.subscribeOnAccountChange(() => {
     resetUserPosition();
+    resetGasTankPosition();
   });
 
   return {
@@ -337,6 +413,19 @@ export const useZkSysEarnStore = defineStore("zkSysEarn", () => {
     userPositionError: computed(() => userPositionError.value),
     requestUserPosition,
     resetUserPosition,
+
+    gasTankAddress,
+    isGasTankAvailable,
+    requestGasTankDeployed,
+    gasTankStats: computed(() => gasTankStats.value),
+    gasTankStatsInProgress: computed(() => gasTankStatsInProgress.value),
+    gasTankStatsError: computed(() => gasTankStatsError.value),
+    requestGasTankStats,
+    gasTankPosition: computed(() => gasTankPosition.value),
+    gasTankPositionInProgress: computed(() => gasTankPositionInProgress.value),
+    gasTankPositionError: computed(() => gasTankPositionError.value),
+    requestGasTankPosition,
+    resetGasTankPosition,
 
     refresh,
 
