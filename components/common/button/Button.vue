@@ -1,5 +1,14 @@
 <template>
-  <component :is="as" type="button" class="default-button" :class="[`size-${size}`, `variant-${variant}`]">
+  <component
+    :is="as"
+    type="button"
+    class="default-button"
+    :class="[`size-${size}`, `variant-${variant}`]"
+    :tabindex="disabledLinkTabIndex"
+    @click.capture="preventDisabledActivation"
+    @keydown.enter.capture="preventDisabledActivation"
+    @keydown.space.capture="preventDisabledActivation"
+  >
     <span v-if="$slots.icon" class="icon-container">
       <slot name="icon" />
     </span>
@@ -8,6 +17,8 @@
 </template>
 
 <script lang="ts" setup>
+const attrs = useAttrs();
+
 defineProps({
   as: {
     type: [String, Object] as PropType<string | Component>,
@@ -22,6 +33,16 @@ defineProps({
     default: "md",
   },
 });
+
+const isAriaDisabled = computed(() => attrs["aria-disabled"] === true || attrs["aria-disabled"] === "true");
+const disabledLinkTabIndex = computed(() => (isAriaDisabled.value ? -1 : undefined));
+
+const preventDisabledActivation = (event: MouseEvent | KeyboardEvent) => {
+  if (!isAriaDisabled.value) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+};
 </script>
 
 <style lang="scss">

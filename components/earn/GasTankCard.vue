@@ -405,7 +405,7 @@ const refreshTank = () => {
       }
     }
     .form-sub {
-      @apply mt-1.5 text-xs text-neutral-600 dark:text-neutral-500;
+      @apply mt-1.5 text-xs text-neutral-600 dark:text-neutral-400;
     }
   }
 }
