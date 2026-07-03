@@ -192,6 +192,14 @@ export default () => {
 
   /** Fund the gas tank, sending an exact-amount ERC20 approval first if the current allowance is short. */
   const commitFundGasTank = async (amount: bigint) => {
+    // The allowance read below is an async RPC call that happens before
+    // commitEarnTransaction marks the flow busy, so guard and set the busy
+    // status synchronously here — otherwise rapid double-clicks during that
+    // window could start duplicate approve/fund flows.
+    if (status.value !== "not-started" && status.value !== "done") return;
+    error.value = undefined;
+    action.value = "fundGasTank";
+    status.value = "processing";
     let needsApproval: boolean;
     try {
       const owner = requireAccountAddress();
@@ -206,6 +214,7 @@ export default () => {
       needsApproval = allowance < amount;
     } catch (err) {
       error.value = formatError(err as Error);
+      status.value = "not-started";
       return;
     }
     if (needsApproval) {
