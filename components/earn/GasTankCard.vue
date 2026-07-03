@@ -192,7 +192,11 @@ const closeForm = () => {
 const amountWei = computed(() => {
   try {
     if (!amount.value) return 0n;
-    return decimalToBigNumber(amount.value, 18);
+    // Plain-text input: treat negative or unparsable values as invalid (0n)
+    // so they hit the "Enter a valid amount" path instead of failing later
+    // at uint256 encoding.
+    const parsed = decimalToBigNumber(amount.value, 18);
+    return parsed > 0n ? parsed : 0n;
   } catch {
     return 0n;
   }
