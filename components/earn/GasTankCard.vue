@@ -79,9 +79,12 @@
               <template v-else-if="mode === 'fund'">
                 Available: {{ zkSysFormatTokenCompact(walletBalance) }} ZKSYS
               </template>
+              <template v-else-if="maxEstimateInProgress">Estimating the withdrawal fee…</template>
               <template v-else>
-                Available: {{ zkSysFormatTokenCompact(credit) }} ZKSYS — Max keeps a small reserve for this
-                transaction's fee when it is paid from your credit.
+                Withdrawable now: {{ zkSysFormatTokenCompact(maxAmount) }} ZKSYS
+                <template v-if="maxAmount < credit">
+                  — a small reserve is kept for this transaction's fee, which is paid from your credit.
+                </template>
               </template>
             </div>
           </div>
@@ -207,53 +210,82 @@ const amountWei = computed(() => {
     return 0n;
   }
 });
-const maxAmount = computed(() => (mode.value === "fund" ? walletBalance.value : credit.value));
+// SYSCOIN: when the credit covers a transaction's full fee prepayment
+// (gasLimit * maxFeePerGas), the bootloader debits that prepayment from the
+// same credit before `withdraw()` executes, so `withdraw(credit)` reverts.
+// Estimate the withdraw fee once per form open (1 wei probe — gas cost is
+// amount-independent) and reserve it from the withdrawable max, used by both
+// the Max button and the amount validation. The unspent part of the
+// prepayment is refunded back to the credit after execution and stays
+// withdrawable.
+const withdrawPrepayment = ref<bigint | undefined>();
 const maxEstimateInProgress = ref(false);
+let prepaymentPromise: Promise<void> | undefined;
+const refreshWithdrawPrepayment = () => {
+  if (!prepaymentPromise) {
+    maxEstimateInProgress.value = true;
+    prepaymentPromise = estimateWithdrawGasTankFee(1n)
+      .then((fee) => {
+        withdrawPrepayment.value = fee.feeAmount;
+      })
+      .catch(() => {
+        // Estimate unavailable — withdrawMax falls back to the full credit.
+        withdrawPrepayment.value = undefined;
+      })
+      .finally(() => {
+        maxEstimateInProgress.value = false;
+        prepaymentPromise = undefined;
+      });
+  }
+  return prepaymentPromise;
+};
+watch(mode, (next) => {
+  if (next === "withdraw" && credit.value > 0n) refreshWithdrawPrepayment();
+});
+
+const withdrawMax = computed(() => {
+  const prepayment = withdrawPrepayment.value;
+  if (prepayment === undefined) return credit.value;
+  if (credit.value > prepayment * 2n) {
+    // Double buffer against fee drift between the estimate and signing.
+    return credit.value - prepayment * 2n;
+  }
+  if (credit.value >= prepayment) {
+    // The bootloader debits the tank whenever credit covers (>=) the
+    // prepayment, so equality still needs the reserve.
+    return credit.value - prepayment;
+  }
+  // Credit cannot cover the prepayment, so the fee is paid in native SYS and
+  // the full credit is withdrawable.
+  return credit.value;
+});
+const maxAmount = computed(() => (mode.value === "fund" ? walletBalance.value : withdrawMax.value));
 const setMaxAmount = async () => {
-  if (mode.value !== "withdraw") {
-    amount.value = formatUnits(maxAmount.value, 18);
-    return;
+  if (mode.value === "withdraw" && withdrawPrepayment.value === undefined) {
+    await refreshWithdrawPrepayment();
   }
-  // SYSCOIN: when the credit covers a transaction's full fee prepayment
-  // (gasLimit * maxFeePerGas), the bootloader debits that prepayment from the
-  // same credit before `withdraw()` executes, so `withdraw(credit)` reverts.
-  // Estimate the withdraw fee (1 wei probe — gas cost is amount-independent)
-  // and reserve it from the max. The unspent part of the prepayment is
-  // refunded back to the credit after execution and stays withdrawable.
-  maxEstimateInProgress.value = true;
-  try {
-    const fee = await estimateWithdrawGasTankFee(1n);
-    const prepayment = fee.feeAmount;
-    let max: bigint;
-    if (credit.value > prepayment * 2n) {
-      // Double buffer against fee drift between the estimate and signing.
-      max = credit.value - prepayment * 2n;
-    } else if (credit.value >= prepayment) {
-      // The bootloader debits the tank whenever credit covers (>=) the
-      // prepayment, so equality still needs the reserve.
-      max = credit.value - prepayment;
-    } else {
-      // Credit cannot cover the prepayment, so the fee is paid in native SYS
-      // and the full credit is withdrawable.
-      max = credit.value;
-    }
-    amount.value = formatUnits(max, 18);
-  } catch {
-    amount.value = formatUnits(credit.value, 18);
-  } finally {
-    maxEstimateInProgress.value = false;
-  }
+  amount.value = formatUnits(maxAmount.value, 18);
 };
 const amountError = computed(() => {
   if (!amount.value) return "";
   if (amountWei.value === 0n) return "Enter a valid amount";
   if (amountWei.value > maxAmount.value) {
-    return mode.value === "fund" ? "Amount exceeds your zkSYS balance" : "Amount exceeds your prepaid credit";
+    if (mode.value === "fund") return "Amount exceeds your zkSYS balance";
+    return amountWei.value <= credit.value
+      ? "Leave a reserve for this transaction's fee — use Max for the highest safe amount"
+      : "Amount exceeds your prepaid credit";
   }
   return "";
 });
 const confirmDisabled = computed(
-  () => isBusy.value || amountWei.value === 0n || amountWei.value > maxAmount.value || !!amountError.value
+  () =>
+    isBusy.value ||
+    amountWei.value === 0n ||
+    amountWei.value > maxAmount.value ||
+    !!amountError.value ||
+    // Don't allow confirming a withdraw against an unreserved max while the
+    // fee estimate is still loading.
+    (mode.value === "withdraw" && maxEstimateInProgress.value)
 );
 
 const needsApproval = computed(
