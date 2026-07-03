@@ -1,13 +1,28 @@
 import { sendTransaction } from "@wagmi/core";
 import { encodeFunctionData, type Address, type Hash, type Hex, type TransactionReceipt } from "viem";
 
-import { ZKSYS_ISSUER_ABI, ZKSYS_REWARD_WEIGHT_REGISTRY_ABI, ZKSYS_STAKING_VAULT_ABI } from "@/data/abis/zksysEarnAbi";
+import {
+  ZKSYS_GAS_TANK_ABI,
+  ZKSYS_ISSUER_ABI,
+  ZKSYS_REWARD_WEIGHT_REGISTRY_ABI,
+  ZKSYS_STAKING_VAULT_ABI,
+  ZKSYS_TOKEN_ABI,
+} from "@/data/abis/zksysEarnAbi";
 import { getSyscoinL2FeeOverrides } from "@/utils/syscoinBridge";
 import { wagmiConfig } from "~/data/wagmi";
 
 import { useSentryLogger } from "../useSentryLogger";
 
-export type ZkSysEarnAction = "stake" | "withdraw" | "activate" | "claim" | "distribute";
+export type ZkSysEarnAction =
+  | "stake"
+  | "withdraw"
+  | "activate"
+  | "claim"
+  | "distribute"
+  | "approveGasTank"
+  | "fundGasTank"
+  | "withdrawGasTank"
+  | "burnSurplus";
 
 type EarnTransactionRequest = {
   to: Address;
@@ -47,6 +62,11 @@ export default () => {
     if (!accountAddress) throw new Error("Wallet account is not available");
     return accountAddress as Address;
   };
+  const requireGasTank = () => {
+    const gasTank = requireContracts().gasTank;
+    if (!gasTank) throw new Error(`The zkSYS gas tank is not available on ${selectedNetwork.value.name}`);
+    return gasTank;
+  };
 
   const buildRequest = {
     stake: (amount: bigint): EarnTransactionRequest => ({
@@ -69,6 +89,22 @@ export default () => {
     distribute: (): EarnTransactionRequest => ({
       to: requireContracts().issuer,
       data: encodeFunctionData({ abi: ZKSYS_ISSUER_ABI, functionName: "distribute" }),
+    }),
+    approveGasTank: (amount: bigint): EarnTransactionRequest => ({
+      to: requireContracts().token,
+      data: encodeFunctionData({ abi: ZKSYS_TOKEN_ABI, functionName: "approve", args: [requireGasTank(), amount] }),
+    }),
+    fundGasTank: (amount: bigint): EarnTransactionRequest => ({
+      to: requireGasTank(),
+      data: encodeFunctionData({ abi: ZKSYS_GAS_TANK_ABI, functionName: "fund", args: [amount] }),
+    }),
+    withdrawGasTank: (amount: bigint): EarnTransactionRequest => ({
+      to: requireGasTank(),
+      data: encodeFunctionData({ abi: ZKSYS_GAS_TANK_ABI, functionName: "withdraw", args: [amount] }),
+    }),
+    burnSurplus: (): EarnTransactionRequest => ({
+      to: requireGasTank(),
+      data: encodeFunctionData({ abi: ZKSYS_GAS_TANK_ABI, functionName: "burnSurplus" }),
     }),
   };
 
@@ -154,8 +190,46 @@ export default () => {
   const commitClaim = (receiver: Address) => commitEarnTransaction("claim", buildRequest.claim(receiver));
   const commitDistribute = () => commitEarnTransaction("distribute", buildRequest.distribute());
 
+  /** Fund the gas tank, sending an exact-amount ERC20 approval first if the current allowance is short. */
+  const commitFundGasTank = async (amount: bigint) => {
+    // The allowance read below is an async RPC call that happens before
+    // commitEarnTransaction marks the flow busy, so guard and set the busy
+    // status synchronously here — otherwise rapid double-clicks during that
+    // window could start duplicate approve/fund flows.
+    if (status.value !== "not-started" && status.value !== "done") return;
+    error.value = undefined;
+    action.value = "fundGasTank";
+    status.value = "processing";
+    let needsApproval: boolean;
+    try {
+      const owner = requireAccountAddress();
+      const gasTank = requireGasTank();
+      const client = earnStore.getEarnPublicClient();
+      const allowance = await client.readContract({
+        address: requireContracts().token,
+        abi: ZKSYS_TOKEN_ABI,
+        functionName: "allowance",
+        args: [owner, gasTank],
+      });
+      needsApproval = allowance < amount;
+    } catch (err) {
+      error.value = formatError(err as Error);
+      status.value = "not-started";
+      return;
+    }
+    if (needsApproval) {
+      const approveReceipt = await commitEarnTransaction("approveGasTank", buildRequest.approveGasTank(amount));
+      if (!approveReceipt) return;
+    }
+    return await commitEarnTransaction("fundGasTank", buildRequest.fundGasTank(amount));
+  };
+  const commitWithdrawGasTank = (amount: bigint) =>
+    commitEarnTransaction("withdrawGasTank", buildRequest.withdrawGasTank(amount));
+  const commitBurnSurplus = () => commitEarnTransaction("burnSurplus", buildRequest.burnSurplus());
+
   const estimateStakeFee = (amount: bigint) => estimateFee(buildRequest.stake(amount));
   const estimateWithdrawFee = (amount: bigint) => estimateFee(buildRequest.withdraw(amount));
+  const estimateWithdrawGasTankFee = (amount: bigint) => estimateFee(buildRequest.withdrawGasTank(amount));
 
   const resetTransaction = () => {
     status.value = "not-started";
@@ -177,9 +251,13 @@ export default () => {
     commitActivate,
     commitClaim,
     commitDistribute,
+    commitFundGasTank,
+    commitWithdrawGasTank,
+    commitBurnSurplus,
 
     estimateStakeFee,
     estimateWithdrawFee,
+    estimateWithdrawGasTankFee,
 
     resetTransaction,
   };

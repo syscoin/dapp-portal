@@ -295,9 +295,9 @@ export default () => {
   );
 
   /**
-   * Cumulative zkSYS burned (gas paid via the Pali paymaster), summed from
-   * token Transfer events to the zero address. Bounded by the indexed log
-   * window, so treat it as "burned so far in the covered range".
+   * Cumulative zkSYS burned (gas-tank surplus burns via burnSurplus()),
+   * summed from token Transfer events to the zero address. Bounded by the
+   * indexed log window, so treat it as "burned so far in the covered range".
    */
   const {
     result: burnedTotal,

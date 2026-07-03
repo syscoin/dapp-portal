@@ -37,6 +37,12 @@
       </ConnectWalletBlock>
       <EarnPositionCard v-else />
 
+      <!-- Gas tank (prepaid zkSYS gas) -->
+      <template v-if="isConnected && isGasTankAvailable">
+        <TypographyCategoryLabel>Gas tank</TypographyCategoryLabel>
+        <EarnGasTankCard />
+      </template>
+
       <!-- Network stats -->
       <TypographyCategoryLabel>
         <span>Network</span>
@@ -77,7 +83,7 @@ const earnStore = useZkSysEarnStore();
 const onboardStore = useOnboardStore();
 const { isConnected } = storeToRefs(onboardStore);
 const { selectedNetwork } = storeToRefs(useNetworkStore());
-const { isEarnAvailable, networkStatsError } = storeToRefs(earnStore);
+const { isEarnAvailable, isGasTankAvailable, networkStatsError } = storeToRefs(earnStore);
 
 const stakeSymbol = computed(() => selectedNetwork.value.nativeCurrency?.symbol ?? "SYS");
 
@@ -85,8 +91,10 @@ const fetchAll = () => {
   if (!isEarnAvailable.value) return;
   earnStore.requestStaticConfig().catch(() => undefined);
   earnStore.requestNetworkStats().catch(() => undefined);
+  earnStore.requestGasTankStats().catch(() => undefined);
   if (isConnected.value) {
     earnStore.requestUserPosition().catch(() => undefined);
+    earnStore.requestGasTankPosition().catch(() => undefined);
   }
 };
 const refreshNetwork = () => {
@@ -97,8 +105,10 @@ fetchAll();
 const { reset: resetAutoUpdate, stop: stopAutoUpdate } = useInterval(() => {
   if (!isEarnAvailable.value) return;
   earnStore.requestNetworkStats({ force: true }).catch(() => undefined);
+  earnStore.requestGasTankStats({ force: true }).catch(() => undefined);
   if (isConnected.value) {
     earnStore.requestUserPosition({ force: true }).catch(() => undefined);
+    earnStore.requestGasTankPosition({ force: true }).catch(() => undefined);
   }
 }, 30_000);
 

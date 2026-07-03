@@ -47,7 +47,22 @@ export const ZKSYS_TOKEN_ABI = parseAbi([
   "function totalSupply() view returns (uint256)",
   "function maxSupply() view returns (uint256)",
   "function balanceOf(address account) view returns (uint256)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
   "event Transfer(address indexed from, address indexed to, uint256 value)",
+]);
+
+export const ZKSYS_GAS_TANK_ABI = parseAbi([
+  "function creditOf(address account) view returns (uint256)",
+  "function totalCredits() view returns (uint256)",
+  "function surplus() view returns (uint256)",
+  "function fund(uint256 amount)",
+  "function fundFor(address account, uint256 amount)",
+  "function withdraw(uint256 amount)",
+  "function burnSurplus() returns (uint256 amount)",
+  "event Funded(address indexed funder, address indexed account, uint256 amount)",
+  "event Withdrawn(address indexed account, uint256 amount)",
+  "event SurplusBurned(address indexed caller, uint256 amount)",
 ]);
 
 export const ZKSYS_MEMBERSHIP_REGISTRY_ABI = parseAbi([
