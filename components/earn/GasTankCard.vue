@@ -228,7 +228,9 @@ const setMaxAmount = async () => {
     if (credit.value > prepayment * 2n) {
       // Double buffer against fee drift between the estimate and signing.
       max = credit.value - prepayment * 2n;
-    } else if (credit.value > prepayment) {
+    } else if (credit.value >= prepayment) {
+      // The bootloader debits the tank whenever credit covers (>=) the
+      // prepayment, so equality still needs the reserve.
       max = credit.value - prepayment;
     } else {
       // Credit cannot cover the prepayment, so the fee is paid in native SYS
