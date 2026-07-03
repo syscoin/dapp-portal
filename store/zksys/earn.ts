@@ -252,12 +252,23 @@ export const useZkSysEarnStore = defineStore("zkSysEarn", () => {
 
   // SYSCOIN: the tank address is pre-computed (deterministic CREATE2), so gate
   // every gas-tank feature on code actually existing at that address.
-  const { result: gasTankDeployed, execute: requestGasTankDeployed } = usePromise<boolean>(async () => {
-    const address = gasTankAddress.value;
-    if (!address) return false;
-    const code = await getEarnPublicClient().getCode({ address });
-    return !!code && code !== "0x";
-  });
+  const { result: gasTankDeployed, execute: executeGasTankDeployed } = usePromise<boolean>(
+    async () => {
+      const address = gasTankAddress.value;
+      if (!address) return false;
+      const code = await getEarnPublicClient().getCode({ address });
+      return !!code && code !== "0x";
+    },
+    // Short TTL so a "not deployed yet" result expires and the periodic
+    // stats/position polls re-check code, letting the UI self-activate once
+    // the deploy lands without a page reload.
+    { cache: 30_000 }
+  );
+  const requestGasTankDeployed = async (): Promise<boolean> => {
+    // Deployment is permanent: once code has been seen, skip further checks.
+    if (gasTankDeployed.value === true) return true;
+    return (await executeGasTankDeployed()) === true;
+  };
   const isGasTankAvailable = computed(() => !!gasTankAddress.value && gasTankDeployed.value === true);
 
   const {
