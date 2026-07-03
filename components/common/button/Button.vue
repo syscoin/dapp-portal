@@ -4,6 +4,7 @@
     type="button"
     class="default-button"
     :class="[`size-${size}`, `variant-${variant}`]"
+    :aria-disabled="isAriaDisabled ? 'true' : undefined"
     :tabindex="disabledLinkTabIndex"
     @click.capture="preventDisabledActivation"
     @keydown.enter.capture="preventDisabledActivation"
@@ -17,9 +18,7 @@
 </template>
 
 <script lang="ts" setup>
-const attrs = useAttrs();
-
-defineProps({
+const props = defineProps({
   as: {
     type: [String, Object] as PropType<string | Component>,
     default: "button",
@@ -32,9 +31,13 @@ defineProps({
     type: String as PropType<"xs" | "sm" | "md">,
     default: "md",
   },
+  ariaDisabled: {
+    type: [Boolean, String] as PropType<boolean | "true" | "false">,
+    default: false,
+  },
 });
 
-const isAriaDisabled = computed(() => attrs["aria-disabled"] === true || attrs["aria-disabled"] === "true");
+const isAriaDisabled = computed(() => props.ariaDisabled === true || props.ariaDisabled === "true");
 const disabledLinkTabIndex = computed(() => (isAriaDisabled.value ? -1 : undefined));
 
 const preventDisabledActivation = (event: MouseEvent | KeyboardEvent) => {
