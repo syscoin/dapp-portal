@@ -399,7 +399,9 @@ const refreshTank = () => {
         @apply h-10 max-w-[14rem] flex-1;
       }
       .form-max {
-        @apply text-sm font-medium text-primary-400 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-60;
+        @apply rounded-full border border-primary-400/30 bg-primary-400/10 px-3 py-1 text-xs font-semibold text-primary-400 transition-colors;
+        @apply hover:border-primary-400/60 hover:bg-primary-400 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400;
+        @apply disabled:cursor-not-allowed disabled:border-transparent disabled:bg-neutral-300 disabled:text-neutral-600 dark:disabled:bg-neutral-800 dark:disabled:text-neutral-500;
       }
     }
     .form-sub {
