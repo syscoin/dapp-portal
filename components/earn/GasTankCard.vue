@@ -59,7 +59,9 @@
             <div class="form-controls">
               <CommonSmallInput v-model="amount" placeholder="0.0" type="text" class="form-input">
                 <template #right>
-                  <button type="button" class="form-max" @click="setMaxAmount()">Max</button>
+                  <button type="button" class="form-max" :disabled="maxEstimateInProgress" @click="setMaxAmount()">
+                    {{ maxEstimateInProgress ? "…" : "Max" }}
+                  </button>
                 </template>
               </CommonSmallInput>
               <CommonButton size="sm" variant="primary" :disabled="confirmDisabled" @click="confirmAction()">
@@ -77,7 +79,10 @@
               <template v-else-if="mode === 'fund'">
                 Available: {{ zkSysFormatTokenCompact(walletBalance) }} ZKSYS
               </template>
-              <template v-else>Available: {{ zkSysFormatTokenCompact(credit) }} ZKSYS</template>
+              <template v-else>
+                Available: {{ zkSysFormatTokenCompact(credit) }} ZKSYS — Max keeps a small reserve for this
+                transaction's fee when it is paid from your credit.
+              </template>
             </div>
           </div>
         </CommonHeightTransition>
@@ -166,6 +171,7 @@ const {
   commitFundGasTank,
   commitWithdrawGasTank,
   commitBurnSurplus,
+  estimateWithdrawGasTankFee,
 } = useEarnTransactions();
 
 const stakeSymbol = computed(() => selectedNetwork.value.nativeCurrency?.symbol ?? "SYS");
@@ -202,8 +208,39 @@ const amountWei = computed(() => {
   }
 });
 const maxAmount = computed(() => (mode.value === "fund" ? walletBalance.value : credit.value));
-const setMaxAmount = () => {
-  amount.value = formatUnits(maxAmount.value, 18);
+const maxEstimateInProgress = ref(false);
+const setMaxAmount = async () => {
+  if (mode.value !== "withdraw") {
+    amount.value = formatUnits(maxAmount.value, 18);
+    return;
+  }
+  // SYSCOIN: when the credit covers a transaction's full fee prepayment
+  // (gasLimit * maxFeePerGas), the bootloader debits that prepayment from the
+  // same credit before `withdraw()` executes, so `withdraw(credit)` reverts.
+  // Estimate the withdraw fee (1 wei probe — gas cost is amount-independent)
+  // and reserve it from the max. The unspent part of the prepayment is
+  // refunded back to the credit after execution and stays withdrawable.
+  maxEstimateInProgress.value = true;
+  try {
+    const fee = await estimateWithdrawGasTankFee(1n);
+    const prepayment = fee.feeAmount;
+    let max: bigint;
+    if (credit.value > prepayment * 2n) {
+      // Double buffer against fee drift between the estimate and signing.
+      max = credit.value - prepayment * 2n;
+    } else if (credit.value > prepayment) {
+      max = credit.value - prepayment;
+    } else {
+      // Credit cannot cover the prepayment, so the fee is paid in native SYS
+      // and the full credit is withdrawable.
+      max = credit.value;
+    }
+    amount.value = formatUnits(max, 18);
+  } catch {
+    amount.value = formatUnits(credit.value, 18);
+  } finally {
+    maxEstimateInProgress.value = false;
+  }
 };
 const amountError = computed(() => {
   if (!amount.value) return "";
@@ -328,7 +365,7 @@ const refreshTank = () => {
         @apply h-10 max-w-[14rem] flex-1;
       }
       .form-max {
-        @apply text-sm font-medium text-primary-400 underline-offset-2 hover:underline;
+        @apply text-sm font-medium text-primary-400 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-60;
       }
     }
     .form-sub {

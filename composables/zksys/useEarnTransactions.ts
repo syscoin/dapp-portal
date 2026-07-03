@@ -220,6 +220,7 @@ export default () => {
 
   const estimateStakeFee = (amount: bigint) => estimateFee(buildRequest.stake(amount));
   const estimateWithdrawFee = (amount: bigint) => estimateFee(buildRequest.withdraw(amount));
+  const estimateWithdrawGasTankFee = (amount: bigint) => estimateFee(buildRequest.withdrawGasTank(amount));
 
   const resetTransaction = () => {
     status.value = "not-started";
@@ -247,6 +248,7 @@ export default () => {
 
     estimateStakeFee,
     estimateWithdrawFee,
+    estimateWithdrawGasTankFee,
 
     resetTransaction,
   };
