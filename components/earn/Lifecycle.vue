@@ -7,7 +7,12 @@
             <CheckIcon v-if="step.status === 'done'" class="h-4 w-4" aria-hidden="true" />
             <span v-else>{{ index + 1 }}</span>
           </span>
-          <span v-if="index < steps.length - 1" class="step-connector" aria-hidden="true" />
+          <span
+            v-if="index < steps.length - 1"
+            class="step-connector"
+            :class="`connector-${connectorStatus(index)}`"
+            aria-hidden="true"
+          />
         </div>
         <div class="step-body">
           <div class="step-label">{{ step.label }}</div>
@@ -112,6 +117,14 @@ const steps = computed(() => {
     },
   ];
 });
+
+const connectorStatus = (index: number): StepStatus => {
+  const current = steps.value[index]?.status;
+  const next = steps.value[index + 1]?.status;
+  if (current === "done" && next === "done") return "done";
+  if ((current === "done" && next === "active") || current === "active") return "active";
+  return "upcoming";
+};
 </script>
 
 <style lang="scss" scoped>
@@ -134,6 +147,13 @@ const steps = computed(() => {
       .step-connector {
         @apply mt-1 h-full w-px flex-1 bg-neutral-200 dark:bg-neutral-800;
         @apply sm:ml-2 sm:mr-2 sm:mt-0 sm:h-px sm:w-auto;
+
+        &.connector-done {
+          @apply bg-success-600/60 dark:bg-success-600/70;
+        }
+        &.connector-active {
+          @apply bg-primary-400 dark:bg-primary-400;
+        }
       }
     }
     .step-body {
@@ -151,7 +171,7 @@ const steps = computed(() => {
       @apply border-success-600 bg-success-600/10 text-success-600;
     }
     &.status-active .step-circle {
-      @apply border-primary-400 bg-primary-400 text-white;
+      @apply border-primary-400 bg-primary-400 text-white dark:border-primary-400 dark:bg-primary-400 dark:text-white;
     }
     &.status-active .step-label {
       @apply text-primary-400 dark:text-primary-300;
