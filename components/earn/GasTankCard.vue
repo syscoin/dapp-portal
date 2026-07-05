@@ -348,7 +348,7 @@ const refreshTank = async () => {
   await Promise.all([
     earnStore.requestGasTankStats({ force: true }).catch(() => undefined),
     earnStore.requestGasTankPosition({ force: true }).catch(() => undefined),
-    earnStore.requestNetworkSummary({ force: true }).catch(() => undefined),
+    earnStore.requestNetworkSummary({ force: true, forceBurnedTotal: true }).catch(() => undefined),
   ]);
 };
 </script>

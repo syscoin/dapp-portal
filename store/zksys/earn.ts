@@ -332,8 +332,14 @@ export const useZkSysEarnStore = defineStore("zkSysEarn", () => {
     { cache: 60_000 }
   );
 
-  const requestNetworkSummary = async (options?: { force?: boolean }) => {
-    await Promise.all([requestNetworkStats(options), requestBurnedTotal(options)]);
+  const requestNetworkSummary = async (options?: { force?: boolean; forceBurnedTotal?: boolean }) => {
+    await Promise.all([
+      requestNetworkStats({ force: options?.force }),
+      // Blockscout logs are best-effort and heavier than direct RPC reads, so
+      // keep the burned total cached unless a user/tx-triggered refresh asks to
+      // force it. A log indexer outage should not block live network stats.
+      requestBurnedTotal({ force: options?.forceBurnedTotal }).catch(() => undefined),
+    ]);
   };
 
   const {
@@ -370,7 +376,7 @@ export const useZkSysEarnStore = defineStore("zkSysEarn", () => {
     if (!isEarnAvailable.value) return;
     await Promise.all([
       requestStaticConfig(),
-      requestNetworkSummary({ force: true }),
+      requestNetworkSummary({ force: true, forceBurnedTotal: true }),
       requestUserPosition({ force: true }),
       requestGasTankStats({ force: true }),
       requestGasTankPosition({ force: true }),

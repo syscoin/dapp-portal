@@ -98,7 +98,7 @@ const fetchAll = () => {
   }
 };
 const refreshNetwork = () => {
-  earnStore.requestNetworkSummary({ force: true }).catch(() => undefined);
+  earnStore.requestNetworkSummary({ force: true, forceBurnedTotal: true }).catch(() => undefined);
 };
 
 fetchAll();
