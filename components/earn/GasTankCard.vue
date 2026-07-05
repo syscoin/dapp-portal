@@ -344,9 +344,12 @@ const confirmAction = () => {
 const burn = () =>
   runAction(() => commitBurnSurplus(), "Surplus burned — spent fees are permanently removed from supply.");
 
-const refreshTank = () => {
-  earnStore.requestGasTankStats({ force: true }).catch(() => undefined);
-  earnStore.requestGasTankPosition({ force: true }).catch(() => undefined);
+const refreshTank = async () => {
+  await Promise.all([
+    earnStore.requestGasTankStats({ force: true }).catch(() => undefined),
+    earnStore.requestGasTankPosition({ force: true }).catch(() => undefined),
+    earnStore.requestNetworkSummary({ force: true }).catch(() => undefined),
+  ]);
 };
 </script>
 

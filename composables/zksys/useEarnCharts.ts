@@ -1,12 +1,7 @@
-import { $fetch } from "ofetch";
-import { decodeEventLog, formatUnits, getAddress, isAddressEqual, zeroAddress, type Address, type Hex } from "viem";
+import { decodeEventLog, formatUnits } from "viem";
 
-import {
-  ZKSYS_ISSUER_ABI,
-  ZKSYS_REWARD_WEIGHT_REGISTRY_ABI,
-  ZKSYS_STAKING_VAULT_ABI,
-  ZKSYS_TOKEN_ABI,
-} from "@/data/abis/zksysEarnAbi";
+import { ZKSYS_ISSUER_ABI, ZKSYS_REWARD_WEIGHT_REGISTRY_ABI, ZKSYS_STAKING_VAULT_ABI } from "@/data/abis/zksysEarnAbi";
+import { fetchZkSysContractLogs, type ZkSysContractLog } from "@/utils/zksysBlockscout";
 import { zkSysCumulativeScheduledRewards, zkSysPeriodAt } from "@/utils/zksysEarn";
 
 import type { ZkSysEarnStaticConfig } from "@/store/zksys/earn";
@@ -22,63 +17,10 @@ export type IssuanceSchedule = {
   mintedTokens: number;
 };
 
-type BlockscoutLogItem = {
-  data: Hex;
-  topics: (Hex | null)[];
-  block_number: number;
-  block_timestamp?: string | null;
-  transaction_hash?: string;
-};
-
-type BlockscoutCollection<T> = {
-  items: T[];
-  next_page_params?: Record<string, string | number | boolean | null> | null;
-};
-
-type ContractLog = {
-  data: Hex;
-  topics: [Hex, ...Hex[]];
-  blockNumber: bigint;
-  timestampMs?: number;
-};
-
 const ISSUANCE_CHART_YEARS = 12;
-const LOG_PAGES_LIMIT = 10; // 50 logs per Blockscout page
 const BLOCK_TIMESTAMP_FETCH_LIMIT = 300;
 
 const toTokens = (amount: bigint) => Number(formatUnits(amount, 18));
-
-// SYSCOIN: Blockscout v2 logs endpoint, newest first. Mirrors the pagination
-// handling in utils/syscoinBlockscout.ts but without the ERC-20 type param.
-const fetchContractLogs = async (apiUrl: string, address: Address, maxPages = LOG_PAGES_LIMIT) => {
-  const items: BlockscoutLogItem[] = [];
-  let nextPageParams: BlockscoutCollection<BlockscoutLogItem>["next_page_params"] = {};
-  const seenPageCursors = new Set<string>();
-
-  for (let page = 0; page < maxPages && nextPageParams !== null; page++) {
-    const url = new URL(`${apiUrl.replace(/\/$/, "")}/addresses/${getAddress(address)}/logs`);
-    for (const [key, value] of Object.entries(nextPageParams ?? {})) {
-      url.searchParams.set(key, value == null ? "" : String(value));
-    }
-
-    const cursor = url.searchParams.toString();
-    if (seenPageCursors.has(cursor)) break;
-    seenPageCursors.add(cursor);
-
-    const response = await $fetch<BlockscoutCollection<BlockscoutLogItem>>(url.toString());
-    items.push(...response.items);
-    nextPageParams = response.next_page_params ?? null;
-  }
-
-  return items
-    .filter((item) => item.topics[0])
-    .map<ContractLog>((item) => ({
-      data: item.data,
-      topics: item.topics.filter((topic): topic is Hex => !!topic) as [Hex, ...Hex[]],
-      blockNumber: BigInt(item.block_number),
-      timestampMs: item.block_timestamp ? new Date(item.block_timestamp).getTime() : undefined,
-    }));
-};
 
 export default () => {
   const earnStore = useZkSysEarnStore();
@@ -88,7 +30,7 @@ export default () => {
 
   // SYSCOIN: not every Blockscout build ships block_timestamp on log items;
   // backfill missing timestamps from the RPC, bounded to keep the page snappy.
-  const resolveLogTimestamps = async (logs: ContractLog[]): Promise<ContractLog[]> => {
+  const resolveLogTimestamps = async (logs: ZkSysContractLog[]): Promise<ZkSysContractLog[]> => {
     const missingBlocks = [...new Set(logs.filter((log) => !log.timestampMs).map((log) => log.blockNumber))];
     if (!missingBlocks.length) return logs;
     if (missingBlocks.length > BLOCK_TIMESTAMP_FETCH_LIMIT) {
@@ -158,7 +100,7 @@ export default () => {
       await earnStore.requestNetworkStats();
       const currentTotal = earnStore.networkStats?.totalStaked ?? 0n;
 
-      const logs = await resolveLogTimestamps(await fetchContractLogs(apiUrl, contracts.stakingVault));
+      const logs = await resolveLogTimestamps(await fetchZkSysContractLogs(apiUrl, contracts.stakingVault));
       type StakeEvent = { timestampMs: number; delta: bigint };
       const events: StakeEvent[] = [];
       for (const log of logs) {
@@ -205,7 +147,7 @@ export default () => {
       await earnStore.requestStaticConfig();
       const staticConfig = earnStore.staticConfig;
 
-      const logs = await resolveLogTimestamps(await fetchContractLogs(apiUrl, contracts.issuer));
+      const logs = await resolveLogTimestamps(await fetchZkSysContractLogs(apiUrl, contracts.issuer));
       const byPeriod = new Map<number, { distributed: number; claimed: number }>();
       const bucket = (period: number) => {
         let entry = byPeriod.get(period);
@@ -259,7 +201,7 @@ export default () => {
       await earnStore.requestNetworkStats();
       const currentTotal = earnStore.networkStats?.totalWeight ?? 0n;
 
-      const logs = await resolveLogTimestamps(await fetchContractLogs(apiUrl, contracts.rewardWeightRegistry));
+      const logs = await resolveLogTimestamps(await fetchZkSysContractLogs(apiUrl, contracts.rewardWeightRegistry));
       type WeightEvent = { timestampMs: number; delta: bigint };
       const events: WeightEvent[] = [];
       for (const log of logs) {
@@ -294,38 +236,6 @@ export default () => {
     { cache: 60_000 }
   );
 
-  /**
-   * Cumulative zkSYS burned (gas-tank surplus burns via burnSurplus()),
-   * summed from token Transfer events to the zero address. Bounded by the
-   * indexed log window, so treat it as "burned so far in the covered range".
-   */
-  const {
-    result: burnedTotal,
-    inProgress: burnedTotalInProgress,
-    error: burnedTotalError,
-    execute: requestBurnedTotal,
-  } = usePromise<bigint>(
-    async () => {
-      const contracts = earnStore.earnContracts;
-      const apiUrl = l2BlockscoutApiUrl.value;
-      if (!contracts || !apiUrl) return 0n;
-
-      const logs = await fetchContractLogs(apiUrl, contracts.token);
-      let burned = 0n;
-      for (const log of logs) {
-        try {
-          const decoded = decodeEventLog({ abi: ZKSYS_TOKEN_ABI, data: log.data, topics: log.topics });
-          if (decoded.eventName !== "Transfer") continue;
-          if (isAddressEqual(decoded.args.to, zeroAddress)) burned += decoded.args.value;
-        } catch {
-          // Not an ERC20 transfer (e.g. votes/roles event); skip.
-        }
-      }
-      return burned;
-    },
-    { cache: 60_000 }
-  );
-
   return {
     buildIssuanceSchedule,
 
@@ -343,10 +253,5 @@ export default () => {
     weightHistoryInProgress,
     weightHistoryError,
     requestWeightHistory,
-
-    burnedTotal,
-    burnedTotalInProgress,
-    burnedTotalError,
-    requestBurnedTotal,
   };
 };

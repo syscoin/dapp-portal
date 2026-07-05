@@ -90,7 +90,7 @@ const stakeSymbol = computed(() => selectedNetwork.value.nativeCurrency?.symbol 
 const fetchAll = () => {
   if (!isEarnAvailable.value) return;
   earnStore.requestStaticConfig().catch(() => undefined);
-  earnStore.requestNetworkStats().catch(() => undefined);
+  earnStore.requestNetworkSummary().catch(() => undefined);
   earnStore.requestGasTankStats().catch(() => undefined);
   if (isConnected.value) {
     earnStore.requestUserPosition().catch(() => undefined);
@@ -98,13 +98,13 @@ const fetchAll = () => {
   }
 };
 const refreshNetwork = () => {
-  earnStore.requestNetworkStats({ force: true }).catch(() => undefined);
+  earnStore.requestNetworkSummary({ force: true }).catch(() => undefined);
 };
 
 fetchAll();
 const { reset: resetAutoUpdate, stop: stopAutoUpdate } = useInterval(() => {
   if (!isEarnAvailable.value) return;
-  earnStore.requestNetworkStats({ force: true }).catch(() => undefined);
+  earnStore.requestNetworkSummary({ force: true }).catch(() => undefined);
   earnStore.requestGasTankStats({ force: true }).catch(() => undefined);
   if (isConnected.value) {
     earnStore.requestUserPosition({ force: true }).catch(() => undefined);

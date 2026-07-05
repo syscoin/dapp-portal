@@ -1,4 +1,13 @@
-import { createPublicClient, http, isAddress, type Address, type PublicClient } from "viem";
+import {
+  createPublicClient,
+  decodeEventLog,
+  http,
+  isAddress,
+  isAddressEqual,
+  zeroAddress,
+  type Address,
+  type PublicClient,
+} from "viem";
 
 import {
   ZKSYS_GAS_TANK_ABI,
@@ -9,6 +18,7 @@ import {
   ZKSYS_TOKEN_ABI,
 } from "@/data/abis/zksysEarnAbi";
 import { getZkSysEarnContracts } from "@/data/zksys";
+import { fetchZkSysContractLogs } from "@/utils/zksysBlockscout";
 import { zkSysPeriodCloseTime, zkSysUndistributedRewards } from "@/utils/zksysEarn";
 
 // SYSCOIN: immutable issuer/registry parameters, read once per network.
@@ -290,6 +300,42 @@ export const useZkSysEarnStore = defineStore("zkSysEarn", () => {
     { cache: 15_000 }
   );
 
+  /**
+   * Cumulative zkSYS burned through gas-tank surplus burns, summed from token
+   * Transfer events to the zero address. Bounded by the indexed log window, so
+   * treat it as "burned so far in the covered range".
+   */
+  const {
+    result: burnedTotal,
+    inProgress: burnedTotalInProgress,
+    error: burnedTotalError,
+    execute: requestBurnedTotal,
+  } = usePromise<bigint>(
+    async () => {
+      const contracts = requireContracts();
+      const apiUrl = selectedNetwork.value.syscoinBridge?.l2BlockscoutApiUrl;
+      if (!apiUrl) return 0n;
+
+      const logs = await fetchZkSysContractLogs(apiUrl, contracts.token);
+      let burned = 0n;
+      for (const log of logs) {
+        try {
+          const decoded = decodeEventLog({ abi: ZKSYS_TOKEN_ABI, data: log.data, topics: log.topics });
+          if (decoded.eventName !== "Transfer") continue;
+          if (isAddressEqual(decoded.args.to, zeroAddress)) burned += decoded.args.value;
+        } catch {
+          // Not an ERC20 transfer (e.g. votes/roles event); skip.
+        }
+      }
+      return burned;
+    },
+    { cache: 60_000 }
+  );
+
+  const requestNetworkSummary = async (options?: { force?: boolean }) => {
+    await Promise.all([requestNetworkStats(options), requestBurnedTotal(options)]);
+  };
+
   const {
     result: gasTankPosition,
     inProgress: gasTankPositionInProgress,
@@ -324,7 +370,7 @@ export const useZkSysEarnStore = defineStore("zkSysEarn", () => {
     if (!isEarnAvailable.value) return;
     await Promise.all([
       requestStaticConfig(),
-      requestNetworkStats({ force: true }),
+      requestNetworkSummary({ force: true }),
       requestUserPosition({ force: true }),
       requestGasTankStats({ force: true }),
       requestGasTankPosition({ force: true }),
@@ -417,6 +463,7 @@ export const useZkSysEarnStore = defineStore("zkSysEarn", () => {
     networkStatsInProgress: computed(() => networkStatsInProgress.value),
     networkStatsError: computed(() => networkStatsError.value),
     requestNetworkStats,
+    requestNetworkSummary,
     resetNetworkStats,
 
     userPosition: computed(() => userPosition.value),
@@ -432,6 +479,10 @@ export const useZkSysEarnStore = defineStore("zkSysEarn", () => {
     gasTankStatsInProgress: computed(() => gasTankStatsInProgress.value),
     gasTankStatsError: computed(() => gasTankStatsError.value),
     requestGasTankStats,
+    burnedTotal: computed(() => burnedTotal.value),
+    burnedTotalInProgress: computed(() => burnedTotalInProgress.value),
+    burnedTotalError: computed(() => burnedTotalError.value),
+    requestBurnedTotal,
     gasTankPosition: computed(() => gasTankPosition.value),
     gasTankPositionInProgress: computed(() => gasTankPositionInProgress.value),
     gasTankPositionError: computed(() => gasTankPositionError.value),
