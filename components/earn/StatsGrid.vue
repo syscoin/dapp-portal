@@ -43,12 +43,11 @@
 <script lang="ts" setup>
 import { ClockIcon } from "@heroicons/vue/24/outline";
 
-import useEarnCharts from "@/composables/zksys/useEarnCharts";
 import { zkSysFormatDuration, zkSysFormatShare, zkSysFormatTokenCompact, zkSysPeriodEmission } from "@/utils/zksysEarn";
 
 const earnStore = useZkSysEarnStore();
 const { selectedNetwork } = storeToRefs(useNetworkStore());
-const { networkStats, staticConfig, networkStatsInProgress, userPosition, currentPeriodCloseTime } =
+const { networkStats, staticConfig, networkStatsInProgress, userPosition, currentPeriodCloseTime, burnedTotal } =
   storeToRefs(earnStore);
 
 const loading = computed(() => (!networkStats.value || !staticConfig.value) && networkStatsInProgress.value);
@@ -60,12 +59,6 @@ const { stop: stopClock } = useInterval(() => {
 }, 30_000);
 onBeforeUnmount(stopClock);
 
-// Cumulative zkSYS burned as gas (gas-tank surplus burns); best-effort from
-// Blockscout logs and only shown once there is something to show.
-const { burnedTotal, requestBurnedTotal } = useEarnCharts();
-onMounted(() => {
-  requestBurnedTotal().catch(() => undefined);
-});
 const burnedSuffix = computed(() => {
   const burned = burnedTotal.value ?? 0n;
   if (burned === 0n) return "";
