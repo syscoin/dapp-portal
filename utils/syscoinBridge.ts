@@ -101,6 +101,11 @@ export type SyscoinAssetRouterWithdrawalMessage = {
   erc20Metadata: Hex;
 };
 
+// The original zkSYS recovery logic accepted the legacy 0x6c0960f9 message
+// prefix. Current v31 asset-router messages encode AssetRouterBase.finalizeDeposit.
+// Keep both formats recoverable while recognizing the canonical v31 selector.
+const SYSCOIN_ASSET_ROUTER_WITHDRAWAL_MESSAGE_SELECTORS = new Set(["0x6c0960f9", "0x9c884fd1"]);
+
 type SyscoinRpcProvider = {
   send: (method: string, params: unknown[]) => Promise<any>;
 };
@@ -300,8 +305,8 @@ export const parseSyscoinBaseTokenWithdrawalMessage = (message: Hex) => {
 };
 
 export const parseSyscoinAssetRouterWithdrawalMessage = (message: Hex): SyscoinAssetRouterWithdrawalMessage => {
-  const selector = "0x6c0960f9";
-  if (!message.toLowerCase().startsWith(selector)) {
+  const selector = message.slice(0, 10).toLowerCase();
+  if (!SYSCOIN_ASSET_ROUTER_WITHDRAWAL_MESSAGE_SELECTORS.has(selector)) {
     throw new Error("Unexpected asset router withdrawal message selector");
   }
 
