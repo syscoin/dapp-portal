@@ -349,15 +349,18 @@ describe("syscoin bridge encoding", () => {
     assert.equal(parsed.amount, amount);
   });
 
-  it("parses asset-router withdrawal messages", () => {
-    const originChainId = 5700n;
+  it.each([
+    ["legacy recovery format", "0x6c0960f9"],
+    ["v31 finalizeDeposit", "0x9c884fd1"],
+  ])("parses asset-router withdrawal messages from the %s", (_, selector) => {
+    const originChainId = 57_057n;
     const originalCaller = "0x4444444444444444444444444444444444444444";
     const erc20Metadata = "0x1234";
     const transferData = encodeAbiParameters(
       [{ type: "address" }, { type: "address" }, { type: "address" }, { type: "uint256" }, { type: "bytes" }],
       [originalCaller, receiver, l1Token, amount, erc20Metadata]
     );
-    const message = `0x6c0960f9${originChainId.toString(16).padStart(64, "0")}${assetId.slice(2)}${transferData.slice(
+    const message = `${selector}${originChainId.toString(16).padStart(64, "0")}${assetId.slice(2)}${transferData.slice(
       2
     )}` as `0x${string}`;
 
