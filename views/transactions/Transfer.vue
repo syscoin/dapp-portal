@@ -326,7 +326,7 @@ import useTransaction, { isWithdrawalManualFinalizationRequired } from "@/compos
 import { customBridgeTokens } from "@/data/customBridgeTokens";
 import { isCustomNode } from "@/data/networks";
 import { syscoinTanenbaumTokens } from "@/data/syscoin";
-import { isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
+import { getSyscoinWithdrawalFeeEstimationAmount, isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
 import TransferSubmitted from "@/views/transactions/TransferSubmitted.vue";
 import WithdrawalSubmitted from "@/views/transactions/WithdrawalSubmitted.vue";
 
@@ -661,6 +661,11 @@ const estimate = async () => {
     return;
   }
 
+  const estimationAmount =
+    props.type === "withdrawal" && isSyscoinBridgeNetwork(eraNetwork.value)
+      ? getSyscoinWithdrawalFeeEstimationAmount(totalComputeAmount.value)
+      : totalComputeAmount.value;
+
   await estimateFee({
     type: props.type,
     from: transaction.value.from.address,
@@ -669,7 +674,7 @@ const estimate = async () => {
     isNativeToken: isNativeToken.value,
     usesAssetIdWithdrawal: props.type === "withdrawal" && usesAssetIdWithdrawal.value,
     assetId: assetId.value,
-    amount: totalComputeAmount.value.toString(),
+    amount: estimationAmount.toString(),
   });
 };
 watch(
