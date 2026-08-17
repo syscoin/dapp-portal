@@ -28,6 +28,7 @@ import {
   getSyscoinFinalizeWithdrawalParams,
   getSyscoinGatewayMigrationFinalizeParams,
   getSyscoinL2FeeOverrides,
+  getSyscoinWithdrawalFeeEstimationAmount,
   parseSyscoinAssetRouterWithdrawalMessage,
   parseSyscoinBaseTokenWithdrawalMessage,
 } from "../utils/syscoinBridge";
@@ -42,6 +43,11 @@ const baseCost = 42_000_000_000_000n;
 const assetId = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 describe("syscoin bridge encoding", () => {
+  it("uses a non-zero probe to estimate an empty withdrawal form without changing real amounts", () => {
+    assert.equal(getSyscoinWithdrawalFeeEstimationAmount(0n), 1n);
+    assert.equal(getSyscoinWithdrawalFeeEstimationAmount(amount), amount);
+  });
+
   it("prefills the Tanenbaum faucet only for valid wallet addresses", () => {
     assert.equal(getSyscoinTanenbaumFaucetUrl(), SYSCOIN_TANENBAUM_FAUCET_URL);
     assert.equal(getSyscoinTanenbaumFaucetUrl("undefined"), SYSCOIN_TANENBAUM_FAUCET_URL);

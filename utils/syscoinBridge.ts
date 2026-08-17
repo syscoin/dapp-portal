@@ -34,6 +34,12 @@ export const SYSCOIN_DEFAULT_L2_PRIORITY_FEE = 5_000_000_000n;
 // timeout is too close to the normal block interval for wallet UX.
 export const SYSCOIN_L1_RECEIPT_TIMEOUT = 15 * 60_000;
 
+// Fee estimation must still run before the user enters an amount so the UI can
+// calculate a spendable native-token maximum. This probe is used for estimation
+// only; the submitted withdrawal always uses the amount entered by the user.
+export const getSyscoinWithdrawalFeeEstimationAmount = (requestedAmount: bigint) =>
+  requestedAmount > 0n ? requestedAmount : 1n;
+
 export const SYSCOIN_BRIDGEHUB_ABI = parseAbi([
   "function chainAssetHandler() view returns (address)",
   "function l2TransactionBaseCost(uint256 chainId, uint256 gasPrice, uint256 l2GasLimit, uint256 l2GasPerPubdataByteLimit) view returns (uint256)",
