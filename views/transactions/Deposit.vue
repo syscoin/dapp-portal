@@ -220,6 +220,9 @@
         <CommonErrorBlock v-if="allowanceRequestError" class="mt-2" @try-again="requestAllowance">
           Checking allowance error: {{ allowanceRequestError.message }}
         </CommonErrorBlock>
+        <CommonErrorBlock v-else-if="allowanceComputationError" class="mt-2" @try-again="retryAllowanceComputation">
+          Checking required allowance error: {{ allowanceComputationError.message }}
+        </CommonErrorBlock>
         <CommonErrorBlock v-else-if="setAllowanceError" class="mt-2" @try-again="setTokenAllowance">
           Allowance approval error: {{ setAllowanceError.message }}
         </CommonErrorBlock>
@@ -384,7 +387,6 @@ import {
   ExclamationTriangleIcon,
   LockClosedIcon,
 } from "@heroicons/vue/24/outline";
-import { computedAsync } from "@vueuse/core";
 import { useRouteQuery } from "@vueuse/router";
 import { isAddress } from "ethers";
 import { zeroHash, type Address, type Hex } from "viem";
@@ -594,23 +596,6 @@ const {
   eraWalletStore.getL1Signer,
   syscoinTokenDepositSkipsAllowance
 );
-const allowanceComputationInProgress = ref(false);
-let allowanceComputationNonce = 0;
-const enoughAllowance = computedAsync(async () => {
-  const computationNonce = ++allowanceComputationNonce;
-  allowanceComputationInProgress.value = true;
-  try {
-    if (allowance?.value === undefined || !selectedToken.value) {
-      return true;
-    }
-
-    const approvalAmounts = await getApprovalAmounts(totalComputeAmount.value, feeValues.value!);
-    const approvalAllowance = approvalAmounts.length ? approvalAmounts[0]?.allowance : 0;
-    return allowance.value !== 0n && allowance?.value >= BigInt(approvalAllowance);
-  } finally {
-    if (computationNonce === allowanceComputationNonce) allowanceComputationInProgress.value = false;
-  }
-}, false);
 const setAmountToCurrentAllowance = () => {
   if (!allowance.value || !selectedToken.value) {
     return;
@@ -689,6 +674,40 @@ const totalComputeAmount = computed(() => {
     });
     return 0n;
   }
+});
+const enoughAllowance = ref(false);
+const allowanceComputationInProgress = ref(false);
+const allowanceComputationError = ref<Error | undefined>();
+let allowanceComputationNonce = 0;
+const computeEnoughAllowance = async () => {
+  const computationNonce = ++allowanceComputationNonce;
+  const requestedAllowance = allowance.value;
+  const requestedToken = selectedToken.value;
+  const requestedAmount = totalComputeAmount.value;
+  const requestedFee = feeValues.value;
+  allowanceComputationInProgress.value = true;
+  allowanceComputationError.value = undefined;
+  try {
+    if (requestedAllowance === undefined || !requestedToken) {
+      if (computationNonce === allowanceComputationNonce) enoughAllowance.value = true;
+      return;
+    }
+
+    const approvalAmounts = await getApprovalAmounts(requestedAmount, requestedFee!);
+    if (computationNonce !== allowanceComputationNonce) return;
+    const approvalAllowance = approvalAmounts.length ? approvalAmounts[0]?.allowance : 0;
+    enoughAllowance.value = requestedAllowance !== 0n && requestedAllowance >= BigInt(approvalAllowance);
+  } catch (err) {
+    if (computationNonce !== allowanceComputationNonce) return;
+    enoughAllowance.value = false;
+    allowanceComputationError.value = formatError(err as Error) ?? new Error("Unable to check required allowance");
+  } finally {
+    if (computationNonce === allowanceComputationNonce) allowanceComputationInProgress.value = false;
+  }
+};
+const retryAllowanceComputation = () => computeEnoughAllowance();
+watch([allowance, () => selectedToken.value?.address, totalComputeAmount, feeValues], () => computeEnoughAllowance(), {
+  immediate: true,
 });
 const enoughBalanceForTransaction = computed(() => !amountError.value);
 
@@ -773,7 +792,12 @@ const continueButtonDisabled = computed(() => {
     BigInt(transaction.value.token.amount) === 0n
   )
     return true;
-  if (allowanceRequestInProgress.value || allowanceComputationInProgress.value || allowanceRequestError.value)
+  if (
+    allowanceRequestInProgress.value ||
+    allowanceComputationInProgress.value ||
+    allowanceRequestError.value ||
+    allowanceComputationError.value
+  )
     return true;
   if (!enoughAllowance.value) return false; // When allowance approval is required we can proceed to approve stage even if deposit fee is not loaded
   if (!isAddressInputValid.value) return true;

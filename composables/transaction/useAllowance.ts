@@ -149,9 +149,9 @@ export default (
       return receipts;
     } catch (err) {
       if (executionNonce !== allowancePreparationNonce) return [];
+      setAllowanceStatus.value = "not-started";
       const formattedError = formatError(err as Error);
       if (!formattedError) return [];
-      setAllowanceStatus.value = "not-started";
       setAllowanceError.value = formattedError;
       captureException({
         error: formattedError,
@@ -209,9 +209,9 @@ export default (
     } catch (err) {
       if (preparationNonce !== allowancePreparationNonce) return;
       if (executionStarted) throw err;
+      setAllowanceStatus.value = "not-started";
       const formattedError = formatError(err as Error);
       if (!formattedError) return;
-      setAllowanceStatus.value = "not-started";
       setAllowanceError.value = formattedError;
       captureException({
         error: formattedError,
