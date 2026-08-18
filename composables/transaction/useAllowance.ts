@@ -15,7 +15,8 @@ export default (
   accountAddress: Ref<string | undefined>,
   tokenAddress: Ref<string | undefined>,
   getContractAddress: () => Promise<string | undefined>,
-  getL1Signer: () => Promise<L1Signer | undefined>
+  getL1Signer: () => Promise<L1Signer | undefined>,
+  shouldSkipAllowance: () => Promise<boolean> = () => Promise.resolve(false)
 ) => {
   const { getPublicClient } = useOnboardStore();
   const { eraNetwork } = storeToRefs(useZkSyncProviderStore());
@@ -29,6 +30,7 @@ export default (
   } = usePromise(
     async () => {
       if (!accountAddress.value) throw new Error("Account address is not available");
+      if (await shouldSkipAllowance()) return undefined;
 
       const contractAddress = await getContractAddress();
       if (!contractAddress) throw new Error("Contract address is not available");
@@ -134,7 +136,7 @@ export default (
   );
   const getApprovalAmounts = async (amount: BigNumberish, fee: DepositFeeValues) => {
     if (isSyscoinBridgeNetwork(eraNetwork.value)) {
-      if (!tokenAddress.value || isSyscoinNativeToken(tokenAddress.value)) {
+      if (!tokenAddress.value || isSyscoinNativeToken(tokenAddress.value) || (await shouldSkipAllowance())) {
         approvalAmounts = [];
         return approvalAmounts;
       }

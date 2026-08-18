@@ -387,6 +387,7 @@ import {
 import { computedAsync } from "@vueuse/core";
 import { useRouteQuery } from "@vueuse/router";
 import { isAddress } from "ethers";
+import { zeroHash, type Address, type Hex } from "viem";
 
 import EthereumTransactionFooter from "@/components/transaction/EthereumTransactionFooter.vue";
 import useAllowance from "@/composables/transaction/useAllowance";
@@ -396,12 +397,16 @@ import useFee from "@/composables/zksync/deposit/useFee";
 import useTransaction from "@/composables/zksync/deposit/useTransaction";
 import { customBridgeTokens } from "@/data/customBridgeTokens";
 import { isCustomNode } from "@/data/networks";
-import { isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
+import {
+  SYSCOIN_L1_ASSET_ROUTER_ABI,
+  SYSCOIN_L1_NATIVE_TOKEN_VAULT_ABI,
+  isSyscoinBridgeNetwork,
+  isSyscoinNativeToken,
+} from "@/utils/syscoinBridge";
 import DepositSubmitted from "@/views/transactions/DepositSubmitted.vue";
 
 import type { Token, TokenAmount } from "@/types";
 import type { BigNumberish } from "ethers";
-import type { Address } from "viem";
 
 const route = useRoute();
 const router = useRouter();
@@ -532,6 +537,39 @@ const tokenBalance = computed<BigNumberish | undefined>(() => {
   return balance.value?.find((e) => e.address === selectedToken.value?.address)?.amount;
 });
 
+const syscoinTokenDepositSkipsAllowance = async () => {
+  const tokenAddress = selectedToken.value?.address;
+  const l1Network = eraNetwork.value.l1Network;
+  if (!isSyscoinBridgeNetwork(eraNetwork.value) || !tokenAddress || isSyscoinNativeToken(tokenAddress) || !l1Network) {
+    return false;
+  }
+
+  const publicClient = onboardStore.getPublicClient();
+  const nativeTokenVault = (await publicClient.readContract({
+    address: eraNetwork.value.syscoinBridge.sharedBridgeAddress,
+    abi: SYSCOIN_L1_ASSET_ROUTER_ABI,
+    functionName: "nativeTokenVault",
+  })) as Address;
+  const assetId = (await publicClient.readContract({
+    address: nativeTokenVault,
+    abi: SYSCOIN_L1_NATIVE_TOKEN_VAULT_ABI,
+    functionName: "assetId",
+    args: [tokenAddress as Address],
+  })) as Hex;
+  if (assetId === zeroHash) return false;
+
+  const originChainId = (await publicClient.readContract({
+    address: nativeTokenVault,
+    abi: SYSCOIN_L1_NATIVE_TOKEN_VAULT_ABI,
+    functionName: "originChainId",
+    args: [assetId],
+  })) as bigint;
+
+  // Wrapped assets that originated on zkSYS are burned by the v31 Native
+  // Token Vault during the deposit and do not use an ERC20 allowance on L1.
+  return originChainId !== BigInt(l1Network.id);
+};
+
 const {
   result: allowance,
   inProgress: allowanceRequestInProgress,
@@ -554,7 +592,8 @@ const {
     if (isSyscoinBridgeNetwork(eraNetwork.value)) return eraNetwork.value.syscoinBridge.sharedBridgeAddress;
     return (await providerStore.requestProvider().then((provider) => provider.getDefaultBridgeAddresses())).sharedL1;
   },
-  eraWalletStore.getL1Signer
+  eraWalletStore.getL1Signer,
+  syscoinTokenDepositSkipsAllowance
 );
 const enoughAllowance = computedAsync(async () => {
   if (allowance?.value === undefined || !selectedToken.value) {

@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
 
-import { encodeAbiParameters, toEventSelector, toFunctionSelector } from "viem";
+import { concatHex, encodeAbiParameters, toEventSelector, toFunctionSelector } from "viem";
 import { describe, it } from "vitest";
 
-import {
-  getSyscoinTanenbaumFaucetUrl,
-  SYSCOIN_TANENBAUM_FAUCET_URL,
-} from "../data/syscoin";
+import { getSyscoinTanenbaumFaucetUrl, SYSCOIN_TANENBAUM_FAUCET_URL } from "../data/syscoin";
 import {
   SYSCOIN_DEFAULT_L1_ERC20_DEPOSIT_GAS_LIMIT,
   SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
@@ -133,7 +130,7 @@ describe("syscoin bridge encoding", () => {
     assert.equal(encodeSyscoinTsysDeposit(request).slice(0, 10), "0xd52471c1");
   });
 
-  it("builds ERC20 Bridgehub two-bridge deposit requests", () => {
+  it("keeps legacy ERC20 deposit data for an unregistered L1 token", () => {
     const secondBridgeCalldata = buildSyscoinErc20SecondBridgeCalldata(l1Token, amount, receiver);
     assert.equal(
       secondBridgeCalldata,
@@ -156,6 +153,30 @@ describe("syscoin bridge encoding", () => {
     assert.equal(request.secondBridgeValue, 0n);
     assert.equal(request.secondBridgeCalldata, secondBridgeCalldata);
     assert.equal(encodeSyscoinErc20Deposit(request).slice(0, 10), "0x24fd57fb");
+  });
+
+  it("builds v31 asset-id deposit data for a registered token", () => {
+    const transferData = encodeAbiParameters(
+      [{ type: "uint256" }, { type: "address" }, { type: "address" }],
+      [amount, receiver, l1Token]
+    );
+    const expectedCalldata = concatHex([
+      "0x01",
+      encodeAbiParameters([{ type: "bytes32" }, { type: "bytes" }], [assetId, transferData]),
+    ]);
+
+    assert.equal(buildSyscoinErc20SecondBridgeCalldata(l1Token, amount, receiver, assetId), expectedCalldata);
+
+    const request = buildSyscoinErc20DepositRequest({
+      chainId,
+      l1Token,
+      amount,
+      l2Receiver: receiver,
+      baseCost,
+      sharedBridgeAddress: sharedBridge,
+      assetId,
+    });
+    assert.equal(request.secondBridgeCalldata, expectedCalldata);
   });
 
   it("builds L2 withdrawal calldata for TSYS and ERC20", () => {
