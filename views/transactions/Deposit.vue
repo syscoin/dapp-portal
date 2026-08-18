@@ -595,15 +595,20 @@ const {
   eraWalletStore.getL1Signer,
   syscoinTokenDepositSkipsAllowance
 );
-const enoughAllowance = computedAsync(async () => {
-  if (allowance?.value === undefined || !selectedToken.value) {
-    return true;
-  }
+const allowanceComputationInProgress = ref(false);
+const enoughAllowance = computedAsync(
+  async () => {
+    if (allowance?.value === undefined || !selectedToken.value) {
+      return true;
+    }
 
-  const approvalAmounts = await getApprovalAmounts(totalComputeAmount.value, feeValues.value!);
-  const approvalAllowance = approvalAmounts.length ? approvalAmounts[0]?.allowance : 0;
-  return allowance.value !== 0n && allowance?.value >= BigInt(approvalAllowance);
-}, false);
+    const approvalAmounts = await getApprovalAmounts(totalComputeAmount.value, feeValues.value!);
+    const approvalAllowance = approvalAmounts.length ? approvalAmounts[0]?.allowance : 0;
+    return allowance.value !== 0n && allowance?.value >= BigInt(approvalAllowance);
+  },
+  false,
+  allowanceComputationInProgress
+);
 const setAmountToCurrentAllowance = () => {
   if (!allowance.value || !selectedToken.value) {
     return;
@@ -766,7 +771,8 @@ const continueButtonDisabled = computed(() => {
     BigInt(transaction.value.token.amount) === 0n
   )
     return true;
-  if ((allowanceRequestInProgress.value && !allowance.value) || allowanceRequestError.value) return true;
+  if (allowanceRequestInProgress.value || allowanceComputationInProgress.value || allowanceRequestError.value)
+    return true;
   if (!enoughAllowance.value) return false; // When allowance approval is required we can proceed to approve stage even if deposit fee is not loaded
   if (!isAddressInputValid.value) return true;
   if (feeLoading.value || !fee.value) return true;
