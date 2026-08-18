@@ -10,6 +10,7 @@ import { useSentryLogger } from "../useSentryLogger";
 import type { DepositFeeValues } from "../zksync/deposit/useFee";
 import type { Hash, TokenAllowance } from "@/types";
 import type { BigNumberish } from "ethers";
+import type { TransactionReceipt } from "viem";
 
 export default (
   accountAddress: Ref<string | undefined>,
@@ -74,88 +75,95 @@ export default (
     "not-started"
   );
   const setAllowanceTransactionHashes = ref<(Hash | undefined)[]>([]);
+  const setAllowanceReceipts = ref<TransactionReceipt[] | undefined>();
+  const executeSetAllowanceInProgress = ref(false);
+  const setAllowanceError = ref<Error | undefined>();
   const allowancePreparationInProgress = ref(false);
   let allowancePreparationNonce = 0;
 
-  const {
-    result: setAllowanceReceipts,
-    inProgress: executeSetAllowanceInProgress,
-    error: setAllowanceError,
-    execute: executeSetAllowance,
-    reset: resetExecuteSetAllowance,
-  } = usePromise(
-    async () => {
-      try {
-        const executionNonce = allowancePreparationNonce;
-        const executionApprovalAmounts = approvalAmounts;
-        setAllowanceStatus.value = "processing";
-        if (!accountAddress.value) throw new Error("Account address is not available");
+  const executeSetAllowance = async () => {
+    const executionNonce = allowancePreparationNonce;
+    const executionApprovalAmounts = approvalAmounts;
+    executeSetAllowanceInProgress.value = true;
+    setAllowanceError.value = undefined;
+    setAllowanceStatus.value = "processing";
+    try {
+      if (!accountAddress.value) throw new Error("Account address is not available");
 
-        const contractAddress = await getContractAddress();
-        if (!contractAddress) throw new Error("Contract address is not available");
+      const contractAddress = await getContractAddress();
+      if (!contractAddress) throw new Error("Contract address is not available");
 
-        const wallet = await getL1Signer();
-        if (executionNonce !== allowancePreparationNonce) return [];
-        setAllowanceStatus.value = "waiting-for-signature";
+      const wallet = await getL1Signer();
+      if (executionNonce !== allowancePreparationNonce) return [];
+      setAllowanceStatus.value = "waiting-for-signature";
 
-        const receipts = [];
+      const receipts: TransactionReceipt[] = [];
 
-        for (let i = 0; i < executionApprovalAmounts.length; i++) {
-          if (executionNonce !== allowancePreparationNonce) return receipts;
-          // SYSCOIN: approve the canonical L1 AssetRouter directly. The
-          // zksync-ethers helper resolves Era bridge addresses internally.
-          const txHash = isSyscoinBridgeNetwork(eraNetwork.value)
-            ? await writeContract(wagmiConfig, {
-                address: executionApprovalAmounts[i].token as Hash,
-                abi: IERC20,
-                functionName: "approve",
-                args: [contractAddress as Hash, executionApprovalAmounts[i].allowance],
-              })
-            : ((await wallet?.approveERC20(executionApprovalAmounts[i].token, executionApprovalAmounts[i].allowance))
-                ?.hash as Hash);
+      for (let i = 0; i < executionApprovalAmounts.length; i++) {
+        if (executionNonce !== allowancePreparationNonce) return receipts;
+        // SYSCOIN: approve the canonical L1 AssetRouter directly. The
+        // zksync-ethers helper resolves Era bridge addresses internally.
+        const txHash = isSyscoinBridgeNetwork(eraNetwork.value)
+          ? await writeContract(wagmiConfig, {
+              address: executionApprovalAmounts[i].token as Hash,
+              abi: IERC20,
+              functionName: "approve",
+              args: [contractAddress as Hash, executionApprovalAmounts[i].allowance],
+            })
+          : ((await wallet?.approveERC20(executionApprovalAmounts[i].token, executionApprovalAmounts[i].allowance))
+              ?.hash as Hash);
 
-          setAllowanceTransactionHashes.value.push(txHash as Hash);
+        if (!txHash) throw new Error("Allowance transaction hash is not available");
+        if (executionNonce !== allowancePreparationNonce) return receipts;
+        setAllowanceTransactionHashes.value.push(txHash as Hash);
+        setAllowanceStatus.value = "sending";
 
-          setAllowanceStatus.value = "sending";
-
-          const receipt = await retry(
-            () =>
-              getPublicClient().waitForTransactionReceipt({
-                hash: setAllowanceTransactionHashes.value[i]!,
-                // SYSCOIN: L1 approvals happen on Tanenbaum, whose ~150s block
-                // time is too close to viem's default 180s timeout.
-                timeout: isSyscoinBridgeNetwork(eraNetwork.value) ? SYSCOIN_L1_RECEIPT_TIMEOUT : undefined,
-                onReplaced: (replacement) => {
+        const receipt = await retry(
+          () =>
+            getPublicClient().waitForTransactionReceipt({
+              hash: txHash,
+              // SYSCOIN: L1 approvals happen on Tanenbaum, whose ~150s block
+              // time is too close to viem's default 180s timeout.
+              timeout: isSyscoinBridgeNetwork(eraNetwork.value) ? SYSCOIN_L1_RECEIPT_TIMEOUT : undefined,
+              onReplaced: (replacement) => {
+                if (executionNonce === allowancePreparationNonce) {
                   setAllowanceTransactionHashes.value[i] = replacement.transaction.hash;
-                },
-              }),
-            {
-              retries: 3,
-              delay: 5_000,
-            }
-          );
-
-          receipts.push(receipt);
-        }
+                }
+              },
+            }),
+          {
+            retries: 3,
+            delay: 5_000,
+          }
+        );
 
         if (executionNonce !== allowancePreparationNonce) return receipts;
-        await requestAllowance();
-
-        if (executionNonce === allowancePreparationNonce) setAllowanceStatus.value = "done";
-        return receipts;
-      } catch (err) {
-        setAllowanceStatus.value = "not-started";
-        captureException({
-          error: err as Error,
-          parentFunctionName: "executeSetAllowance",
-          parentFunctionParams: [],
-          filePath: "composables/transaction/useAllowance.ts",
-        });
-        throw err;
+        receipts.push(receipt);
       }
-    },
-    { cache: false }
-  );
+
+      await requestAllowance();
+      if (executionNonce !== allowancePreparationNonce) return receipts;
+
+      setAllowanceReceipts.value = receipts;
+      setAllowanceStatus.value = "done";
+      return receipts;
+    } catch (err) {
+      if (executionNonce !== allowancePreparationNonce) return [];
+      const formattedError = formatError(err as Error);
+      if (!formattedError) return [];
+      setAllowanceStatus.value = "not-started";
+      setAllowanceError.value = formattedError;
+      captureException({
+        error: formattedError,
+        parentFunctionName: "executeSetAllowance",
+        parentFunctionParams: [],
+        filePath: "composables/transaction/useAllowance.ts",
+      });
+      throw formattedError;
+    } finally {
+      if (executionNonce === allowancePreparationNonce) executeSetAllowanceInProgress.value = false;
+    }
+  };
   const setAllowanceInProgress = computed(
     () => allowancePreparationInProgress.value || executeSetAllowanceInProgress.value
   );
@@ -188,13 +196,30 @@ export default (
   const setAllowance = async (amount: BigNumberish, fee: DepositFeeValues) => {
     const preparationNonce = ++allowancePreparationNonce;
     const requestedToken = tokenAddress.value;
+    let executionStarted = false;
     allowancePreparationInProgress.value = true;
+    setAllowanceError.value = undefined;
     setAllowanceStatus.value = "processing";
     try {
       const preparedApprovalAmounts = await getApprovalAmounts(amount, fee);
       if (preparationNonce !== allowancePreparationNonce || tokenAddress.value !== requestedToken) return;
       approvalAmounts = preparedApprovalAmounts;
+      executionStarted = true;
       await executeSetAllowance();
+    } catch (err) {
+      if (preparationNonce !== allowancePreparationNonce) return;
+      if (executionStarted) throw err;
+      const formattedError = formatError(err as Error);
+      if (!formattedError) return;
+      setAllowanceStatus.value = "not-started";
+      setAllowanceError.value = formattedError;
+      captureException({
+        error: formattedError,
+        parentFunctionName: "setAllowance",
+        parentFunctionParams: [requestedToken],
+        filePath: "composables/transaction/useAllowance.ts",
+      });
+      throw formattedError;
     } finally {
       if (preparationNonce === allowancePreparationNonce) allowancePreparationInProgress.value = false;
     }
@@ -204,9 +229,11 @@ export default (
     ++allowancePreparationNonce;
     approvalAmounts = [];
     allowancePreparationInProgress.value = false;
+    executeSetAllowanceInProgress.value = false;
     setAllowanceStatus.value = "not-started";
     setAllowanceTransactionHashes.value = [];
-    resetExecuteSetAllowance();
+    setAllowanceReceipts.value = undefined;
+    setAllowanceError.value = undefined;
   };
 
   watch(

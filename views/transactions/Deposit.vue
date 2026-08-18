@@ -595,8 +595,11 @@ const {
   syscoinTokenDepositSkipsAllowance
 );
 const allowanceComputationInProgress = ref(false);
-const enoughAllowance = computedAsync(
-  async () => {
+let allowanceComputationNonce = 0;
+const enoughAllowance = computedAsync(async () => {
+  const computationNonce = ++allowanceComputationNonce;
+  allowanceComputationInProgress.value = true;
+  try {
     if (allowance?.value === undefined || !selectedToken.value) {
       return true;
     }
@@ -604,10 +607,10 @@ const enoughAllowance = computedAsync(
     const approvalAmounts = await getApprovalAmounts(totalComputeAmount.value, feeValues.value!);
     const approvalAllowance = approvalAmounts.length ? approvalAmounts[0]?.allowance : 0;
     return allowance.value !== 0n && allowance?.value >= BigInt(approvalAllowance);
-  },
-  false,
-  allowanceComputationInProgress
-);
+  } finally {
+    if (computationNonce === allowanceComputationNonce) allowanceComputationInProgress.value = false;
+  }
+}, false);
 const setAmountToCurrentAllowance = () => {
   if (!allowance.value || !selectedToken.value) {
     return;
