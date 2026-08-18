@@ -1,4 +1,5 @@
 import {
+  concatHex,
   decodeAbiParameters,
   decodeEventLog,
   encodeAbiParameters,
@@ -76,7 +77,11 @@ export const SYSCOIN_L1_NULLIFIER_ABI = parseAbi([
 
 export const SYSCOIN_L1_ASSET_ROUTER_ABI = parseAbi(["function nativeTokenVault() view returns (address)"]);
 
-export const SYSCOIN_L1_NATIVE_TOKEN_VAULT_ABI = parseAbi(["function l1AssetTracker() view returns (address)"]);
+export const SYSCOIN_L1_NATIVE_TOKEN_VAULT_ABI = parseAbi([
+  "function l1AssetTracker() view returns (address)",
+  "function assetId(address token) view returns (bytes32)",
+  "function originChainId(bytes32 assetId) view returns (uint256)",
+]);
 
 export const SYSCOIN_L1_ASSET_TRACKER_ABI = parseAbi([
   "function receiveL1ToGatewayMigrationOnL1((uint256 chainId, uint256 l2BatchNumber, uint256 l2MessageIndex, address l2Sender, uint16 l2TxNumberInBatch, bytes message, bytes32[] merkleProof) finalizeWithdrawalParams)",
@@ -336,11 +341,27 @@ export const parseSyscoinAssetRouterWithdrawalMessage = (message: Hex): SyscoinA
   };
 };
 
-export const buildSyscoinErc20SecondBridgeCalldata = (l1Token: Address, amount: bigint, l2Receiver: Address) => {
-  return encodeAbiParameters(
+export const buildSyscoinErc20SecondBridgeCalldata = (
+  l1Token: Address,
+  amount: bigint,
+  l2Receiver: Address,
+  assetId?: Hex
+) => {
+  const transferData = encodeAbiParameters(
     [{ type: "address" }, { type: "uint256" }, { type: "address" }],
     [l1Token, amount, l2Receiver]
   );
+
+  if (!assetId) return transferData;
+
+  // v31 requires registered assets to identify the canonical origin asset.
+  // Legacy address-first data is only safe while an L1-native token is still
+  // unregistered and its asset id can be derived from the L1 token address.
+  const v31TransferData = encodeAbiParameters(
+    [{ type: "uint256" }, { type: "address" }, { type: "address" }],
+    [amount, l2Receiver, l1Token]
+  );
+  return concatHex(["0x01", encodeAbiParameters([{ type: "bytes32" }, { type: "bytes" }], [assetId, v31TransferData])]);
 };
 
 export const buildSyscoinTsysDepositRequest = (params: {
@@ -376,6 +397,7 @@ export const buildSyscoinErc20DepositRequest = (params: {
   l2Receiver: Address;
   baseCost: bigint;
   sharedBridgeAddress: Address;
+  assetId?: Hex;
   l2GasLimit?: bigint;
   l2GasPerPubdataByteLimit?: bigint;
   refundRecipient?: Address;
@@ -392,7 +414,12 @@ export const buildSyscoinErc20DepositRequest = (params: {
     refundRecipient: params.refundRecipient ?? params.l2Receiver,
     secondBridgeAddress: params.sharedBridgeAddress,
     secondBridgeValue: 0n,
-    secondBridgeCalldata: buildSyscoinErc20SecondBridgeCalldata(params.l1Token, params.amount, params.l2Receiver),
+    secondBridgeCalldata: buildSyscoinErc20SecondBridgeCalldata(
+      params.l1Token,
+      params.amount,
+      params.l2Receiver,
+      params.assetId
+    ),
   };
 };
 

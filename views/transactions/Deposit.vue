@@ -50,7 +50,7 @@
           :balances="availableBalances"
           :max-amount="maxAmount"
           :approve-required="!enoughAllowance && (!tokenCustomBridge || !tokenCustomBridge.bridgingDisabled)"
-          :loading="tokensRequestInProgress || balanceInProgress || feeLoading"
+          :loading="tokensRequestInProgress || balanceInProgress || feeLoading || setAllowanceInProgress"
           class="mb-block-padding-1/2 sm:mb-block-gap"
         >
           <template #dropdown>
@@ -220,6 +220,9 @@
         <CommonErrorBlock v-if="allowanceRequestError" class="mt-2" @try-again="requestAllowance">
           Checking allowance error: {{ allowanceRequestError.message }}
         </CommonErrorBlock>
+        <CommonErrorBlock v-else-if="allowanceComputationError" class="mt-2" @try-again="retryAllowanceComputation">
+          Checking required allowance error: {{ allowanceComputationError.message }}
+        </CommonErrorBlock>
         <CommonErrorBlock v-else-if="setAllowanceError" class="mt-2" @try-again="setTokenAllowance">
           Allowance approval error: {{ setAllowanceError.message }}
         </CommonErrorBlock>
@@ -384,9 +387,9 @@ import {
   ExclamationTriangleIcon,
   LockClosedIcon,
 } from "@heroicons/vue/24/outline";
-import { computedAsync } from "@vueuse/core";
 import { useRouteQuery } from "@vueuse/router";
 import { isAddress } from "ethers";
+import { zeroHash, type Address, type Hex } from "viem";
 
 import EthereumTransactionFooter from "@/components/transaction/EthereumTransactionFooter.vue";
 import useAllowance from "@/composables/transaction/useAllowance";
@@ -396,12 +399,16 @@ import useFee from "@/composables/zksync/deposit/useFee";
 import useTransaction from "@/composables/zksync/deposit/useTransaction";
 import { customBridgeTokens } from "@/data/customBridgeTokens";
 import { isCustomNode } from "@/data/networks";
-import { isSyscoinBridgeNetwork } from "@/utils/syscoinBridge";
+import {
+  SYSCOIN_L1_ASSET_ROUTER_ABI,
+  SYSCOIN_L1_NATIVE_TOKEN_VAULT_ABI,
+  isSyscoinBridgeNetwork,
+  isSyscoinNativeToken,
+} from "@/utils/syscoinBridge";
 import DepositSubmitted from "@/views/transactions/DepositSubmitted.vue";
 
 import type { Token, TokenAmount } from "@/types";
 import type { BigNumberish } from "ethers";
-import type { Address } from "viem";
 
 const route = useRoute();
 const router = useRouter();
@@ -532,6 +539,38 @@ const tokenBalance = computed<BigNumberish | undefined>(() => {
   return balance.value?.find((e) => e.address === selectedToken.value?.address)?.amount;
 });
 
+const syscoinTokenDepositSkipsAllowance = async (tokenAddress: string) => {
+  const l1Network = eraNetwork.value.l1Network;
+  if (!isSyscoinBridgeNetwork(eraNetwork.value) || isSyscoinNativeToken(tokenAddress) || !l1Network) {
+    return false;
+  }
+
+  const publicClient = onboardStore.getPublicClient();
+  const nativeTokenVault = (await publicClient.readContract({
+    address: eraNetwork.value.syscoinBridge.sharedBridgeAddress,
+    abi: SYSCOIN_L1_ASSET_ROUTER_ABI,
+    functionName: "nativeTokenVault",
+  })) as Address;
+  const assetId = (await publicClient.readContract({
+    address: nativeTokenVault,
+    abi: SYSCOIN_L1_NATIVE_TOKEN_VAULT_ABI,
+    functionName: "assetId",
+    args: [tokenAddress as Address],
+  })) as Hex;
+  if (assetId === zeroHash) return false;
+
+  const originChainId = (await publicClient.readContract({
+    address: nativeTokenVault,
+    abi: SYSCOIN_L1_NATIVE_TOKEN_VAULT_ABI,
+    functionName: "originChainId",
+    args: [assetId],
+  })) as bigint;
+
+  // Wrapped assets that originated on zkSYS are burned by the v31 Native
+  // Token Vault during the deposit and do not use an ERC20 allowance on L1.
+  return originChainId !== BigInt(l1Network.id);
+};
+
 const {
   result: allowance,
   inProgress: allowanceRequestInProgress,
@@ -554,17 +593,9 @@ const {
     if (isSyscoinBridgeNetwork(eraNetwork.value)) return eraNetwork.value.syscoinBridge.sharedBridgeAddress;
     return (await providerStore.requestProvider().then((provider) => provider.getDefaultBridgeAddresses())).sharedL1;
   },
-  eraWalletStore.getL1Signer
+  eraWalletStore.getL1Signer,
+  syscoinTokenDepositSkipsAllowance
 );
-const enoughAllowance = computedAsync(async () => {
-  if (allowance?.value === undefined || !selectedToken.value) {
-    return true;
-  }
-
-  const approvalAmounts = await getApprovalAmounts(totalComputeAmount.value, feeValues.value!);
-  const approvalAllowance = approvalAmounts.length ? approvalAmounts[0]?.allowance : 0;
-  return allowance.value !== 0n && allowance?.value >= BigInt(approvalAllowance);
-}, false);
 const setAmountToCurrentAllowance = () => {
   if (!allowance.value || !selectedToken.value) {
     return;
@@ -643,6 +674,40 @@ const totalComputeAmount = computed(() => {
     });
     return 0n;
   }
+});
+const enoughAllowance = ref(false);
+const allowanceComputationInProgress = ref(false);
+const allowanceComputationError = ref<Error | undefined>();
+let allowanceComputationNonce = 0;
+const computeEnoughAllowance = async () => {
+  const computationNonce = ++allowanceComputationNonce;
+  const requestedAllowance = allowance.value;
+  const requestedToken = selectedToken.value;
+  const requestedAmount = totalComputeAmount.value;
+  const requestedFee = feeValues.value;
+  allowanceComputationInProgress.value = true;
+  allowanceComputationError.value = undefined;
+  try {
+    if (requestedAllowance === undefined || !requestedToken) {
+      if (computationNonce === allowanceComputationNonce) enoughAllowance.value = true;
+      return;
+    }
+
+    const approvalAmounts = await getApprovalAmounts(requestedAmount, requestedFee!);
+    if (computationNonce !== allowanceComputationNonce) return;
+    const approvalAllowance = approvalAmounts.length ? approvalAmounts[0]?.allowance : 0;
+    enoughAllowance.value = requestedAllowance !== 0n && requestedAllowance >= BigInt(approvalAllowance);
+  } catch (err) {
+    if (computationNonce !== allowanceComputationNonce) return;
+    enoughAllowance.value = false;
+    allowanceComputationError.value = formatError(err as Error) ?? new Error("Unable to check required allowance");
+  } finally {
+    if (computationNonce === allowanceComputationNonce) allowanceComputationInProgress.value = false;
+  }
+};
+const retryAllowanceComputation = () => computeEnoughAllowance();
+watch([allowance, () => selectedToken.value?.address, totalComputeAmount, feeValues], () => computeEnoughAllowance(), {
+  immediate: true,
 });
 const enoughBalanceForTransaction = computed(() => !amountError.value);
 
@@ -727,7 +792,13 @@ const continueButtonDisabled = computed(() => {
     BigInt(transaction.value.token.amount) === 0n
   )
     return true;
-  if ((allowanceRequestInProgress.value && !allowance.value) || allowanceRequestError.value) return true;
+  if (
+    allowanceRequestInProgress.value ||
+    allowanceComputationInProgress.value ||
+    allowanceRequestError.value ||
+    allowanceComputationError.value
+  )
+    return true;
   if (!enoughAllowance.value) return false; // When allowance approval is required we can proceed to approve stage even if deposit fee is not loaded
   if (!isAddressInputValid.value) return true;
   if (feeLoading.value || !fee.value) return true;

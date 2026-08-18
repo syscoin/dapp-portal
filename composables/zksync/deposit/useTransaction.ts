@@ -1,5 +1,5 @@
 import { readContract, writeContract } from "@wagmi/core";
-import { getAddress, zeroAddress, type Address, type Hash } from "viem";
+import { getAddress, zeroAddress, zeroHash, type Address, type Hash, type Hex } from "viem";
 import { L1Signer } from "zksync-ethers";
 import { getERC20DefaultBridgeData, REQUIRED_L1_TO_L2_GAS_PER_PUBDATA_LIMIT } from "zksync-ethers/build/utils";
 
@@ -8,6 +8,8 @@ import { L1_BRIDGE_ABI } from "@/data/abis/l1BridgeAbi";
 import { wagmiConfig } from "@/data/wagmi";
 import {
   SYSCOIN_BRIDGEHUB_ABI,
+  SYSCOIN_L1_ASSET_ROUTER_ABI,
+  SYSCOIN_L1_NATIVE_TOKEN_VAULT_ABI,
   buildSyscoinErc20DepositRequest,
   buildSyscoinTsysDepositRequest,
   isSyscoinBridgeNetwork,
@@ -140,8 +142,27 @@ export default (getL1Signer: () => Promise<L1Signer | undefined>) => {
       // SYSCOIN: Tanenbaum uses the OS Bridgehub flow directly; this avoids
       // zksync-ethers deposit helpers that require zks_estimateGasL1ToL2.
       if (isSyscoinBridgeNetwork(eraNetwork.value)) {
+        const l1Network = eraNetwork.value.l1Network;
+        if (!l1Network) throw new Error("L1 network is not available");
         const amount = BigInt(transaction.amount.toString());
         const baseCost = fee.baseCost ?? 0n;
+        let assetId: Hex | undefined;
+        if (!isSyscoinNativeToken(transaction.tokenAddress)) {
+          const nativeTokenVault = (await readContract(wagmiConfig, {
+            chainId: l1Network.id,
+            address: eraNetwork.value.syscoinBridge.sharedBridgeAddress,
+            abi: SYSCOIN_L1_ASSET_ROUTER_ABI,
+            functionName: "nativeTokenVault",
+          })) as Address;
+          const registeredAssetId = (await readContract(wagmiConfig, {
+            chainId: l1Network.id,
+            address: nativeTokenVault,
+            abi: SYSCOIN_L1_NATIVE_TOKEN_VAULT_ABI,
+            functionName: "assetId",
+            args: [transaction.tokenAddress],
+          })) as Hex;
+          assetId = registeredAssetId === zeroHash ? undefined : registeredAssetId;
+        }
         const commonWriteParams = overrides.gasPrice
           ? { gas: fee.l1GasLimit, gasPrice: overrides.gasPrice, type: "legacy" as const }
           : {
@@ -179,6 +200,7 @@ export default (getL1Signer: () => Promise<L1Signer | undefined>) => {
                   l2Receiver: transaction.to,
                   baseCost,
                   sharedBridgeAddress: eraNetwork.value.syscoinBridge.sharedBridgeAddress,
+                  assetId,
                   l2GasLimit: fee.l2GasLimit,
                   refundRecipient: getAddress(wallet.address) as Address,
                 }),
