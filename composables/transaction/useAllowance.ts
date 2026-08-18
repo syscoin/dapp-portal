@@ -74,16 +74,20 @@ export default (
     "not-started"
   );
   const setAllowanceTransactionHashes = ref<(Hash | undefined)[]>([]);
+  const allowancePreparationInProgress = ref(false);
+  let allowancePreparationNonce = 0;
 
   const {
     result: setAllowanceReceipts,
-    inProgress: setAllowanceInProgress,
+    inProgress: executeSetAllowanceInProgress,
     error: setAllowanceError,
     execute: executeSetAllowance,
     reset: resetExecuteSetAllowance,
   } = usePromise(
     async () => {
       try {
+        const executionNonce = allowancePreparationNonce;
+        const executionApprovalAmounts = approvalAmounts;
         setAllowanceStatus.value = "processing";
         if (!accountAddress.value) throw new Error("Account address is not available");
 
@@ -91,21 +95,24 @@ export default (
         if (!contractAddress) throw new Error("Contract address is not available");
 
         const wallet = await getL1Signer();
+        if (executionNonce !== allowancePreparationNonce) return [];
         setAllowanceStatus.value = "waiting-for-signature";
 
         const receipts = [];
 
-        for (let i = 0; i < approvalAmounts.length; i++) {
+        for (let i = 0; i < executionApprovalAmounts.length; i++) {
+          if (executionNonce !== allowancePreparationNonce) return receipts;
           // SYSCOIN: approve the canonical L1 AssetRouter directly. The
           // zksync-ethers helper resolves Era bridge addresses internally.
           const txHash = isSyscoinBridgeNetwork(eraNetwork.value)
             ? await writeContract(wagmiConfig, {
-                address: approvalAmounts[i].token as Hash,
+                address: executionApprovalAmounts[i].token as Hash,
                 abi: IERC20,
                 functionName: "approve",
-                args: [contractAddress as Hash, approvalAmounts[i].allowance],
+                args: [contractAddress as Hash, executionApprovalAmounts[i].allowance],
               })
-            : ((await wallet?.approveERC20(approvalAmounts[i].token, approvalAmounts[i].allowance))?.hash as Hash);
+            : ((await wallet?.approveERC20(executionApprovalAmounts[i].token, executionApprovalAmounts[i].allowance))
+                ?.hash as Hash);
 
           setAllowanceTransactionHashes.value.push(txHash as Hash);
 
@@ -131,9 +138,10 @@ export default (
           receipts.push(receipt);
         }
 
+        if (executionNonce !== allowancePreparationNonce) return receipts;
         await requestAllowance();
 
-        setAllowanceStatus.value = "done";
+        if (executionNonce === allowancePreparationNonce) setAllowanceStatus.value = "done";
         return receipts;
       } catch (err) {
         setAllowanceStatus.value = "not-started";
@@ -148,15 +156,16 @@ export default (
     },
     { cache: false }
   );
+  const setAllowanceInProgress = computed(
+    () => allowancePreparationInProgress.value || executeSetAllowanceInProgress.value
+  );
   const getApprovalAmounts = async (amount: BigNumberish, fee: DepositFeeValues) => {
     const requestedToken = tokenAddress.value;
     if (isSyscoinBridgeNetwork(eraNetwork.value)) {
       if (!requestedToken || isSyscoinNativeToken(requestedToken) || (await shouldSkipAllowance(requestedToken))) {
-        approvalAmounts = [];
-        return approvalAmounts;
+        return [];
       }
-      approvalAmounts = [{ token: requestedToken as Hash, allowance: BigInt(amount.toString()) }];
-      return approvalAmounts;
+      return [{ token: requestedToken as Hash, allowance: BigInt(amount.toString()) }];
     }
 
     const wallet = await getL1Signer();
@@ -173,18 +182,28 @@ export default (
       overrides.gasPrice = undefined;
     }
 
-    approvalAmounts = (await wallet.getDepositAllowanceParams(requestedToken!, amount, overrides)) as TokenAllowance[];
-
-    return approvalAmounts;
+    return (await wallet.getDepositAllowanceParams(requestedToken!, amount, overrides)) as TokenAllowance[];
   };
 
   const setAllowance = async (amount: BigNumberish, fee: DepositFeeValues) => {
-    await getApprovalAmounts(amount, fee);
-    await executeSetAllowance();
+    const preparationNonce = ++allowancePreparationNonce;
+    const requestedToken = tokenAddress.value;
+    allowancePreparationInProgress.value = true;
+    setAllowanceStatus.value = "processing";
+    try {
+      const preparedApprovalAmounts = await getApprovalAmounts(amount, fee);
+      if (preparationNonce !== allowancePreparationNonce || tokenAddress.value !== requestedToken) return;
+      approvalAmounts = preparedApprovalAmounts;
+      await executeSetAllowance();
+    } finally {
+      if (preparationNonce === allowancePreparationNonce) allowancePreparationInProgress.value = false;
+    }
   };
 
   const resetSetAllowance = () => {
+    ++allowancePreparationNonce;
     approvalAmounts = [];
+    allowancePreparationInProgress.value = false;
     setAllowanceStatus.value = "not-started";
     setAllowanceTransactionHashes.value = [];
     resetExecuteSetAllowance();
