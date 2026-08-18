@@ -16,42 +16,56 @@ export default (
   tokenAddress: Ref<string | undefined>,
   getContractAddress: () => Promise<string | undefined>,
   getL1Signer: () => Promise<L1Signer | undefined>,
-  shouldSkipAllowance: () => Promise<boolean> = () => Promise.resolve(false)
+  shouldSkipAllowance: (tokenAddress: string) => Promise<boolean> = () => Promise.resolve(false)
 ) => {
   const { getPublicClient } = useOnboardStore();
   const { eraNetwork } = storeToRefs(useZkSyncProviderStore());
   const { captureException } = useSentryLogger();
-  const {
-    result,
-    inProgress,
-    error,
-    execute: getAllowance,
-    reset,
-  } = usePromise(
-    async () => {
-      if (!accountAddress.value) throw new Error("Account address is not available");
-      if (await shouldSkipAllowance()) return undefined;
+  const result = ref<bigint | undefined>();
+  const inProgress = ref(false);
+  const error = ref<Error | undefined>();
+  let allowanceRequestNonce = 0;
+
+  const requestAllowance = async () => {
+    const requestNonce = ++allowanceRequestNonce;
+    const requestedAccount = accountAddress.value;
+    const requestedToken = tokenAddress.value;
+    result.value = undefined;
+    error.value = undefined;
+
+    if (!requestedAccount || !requestedToken || requestedToken === utils.ETH_ADDRESS) {
+      inProgress.value = false;
+      return;
+    }
+
+    inProgress.value = true;
+    try {
+      if (await shouldSkipAllowance(requestedToken)) return;
 
       const contractAddress = await getContractAddress();
       if (!contractAddress) throw new Error("Contract address is not available");
 
       const publicClient = getPublicClient();
       const allowance = (await publicClient!.readContract({
-        address: tokenAddress.value as Hash,
+        address: requestedToken as Hash,
         abi: IERC20,
         functionName: "allowance",
-        args: [accountAddress.value, contractAddress],
+        args: [requestedAccount, contractAddress],
       })) as bigint;
-      return BigInt(allowance);
-    },
-    { cache: false }
-  );
-
-  const requestAllowance = async () => {
-    if (accountAddress.value && tokenAddress.value && tokenAddress.value !== utils.ETH_ADDRESS) {
-      await getAllowance();
-    } else {
-      reset();
+      if (requestNonce === allowanceRequestNonce) result.value = BigInt(allowance);
+    } catch (err) {
+      if (requestNonce !== allowanceRequestNonce) return;
+      const formattedError = formatError(err as Error);
+      if (!formattedError) return;
+      error.value = formattedError;
+      captureException({
+        error: formattedError,
+        parentFunctionName: "requestAllowance",
+        parentFunctionParams: [requestedAccount, requestedToken],
+        filePath: "composables/transaction/useAllowance.ts",
+      });
+    } finally {
+      if (requestNonce === allowanceRequestNonce) inProgress.value = false;
     }
   };
 
@@ -135,12 +149,13 @@ export default (
     { cache: false }
   );
   const getApprovalAmounts = async (amount: BigNumberish, fee: DepositFeeValues) => {
+    const requestedToken = tokenAddress.value;
     if (isSyscoinBridgeNetwork(eraNetwork.value)) {
-      if (!tokenAddress.value || isSyscoinNativeToken(tokenAddress.value) || (await shouldSkipAllowance())) {
+      if (!requestedToken || isSyscoinNativeToken(requestedToken) || (await shouldSkipAllowance(requestedToken))) {
         approvalAmounts = [];
         return approvalAmounts;
       }
-      approvalAmounts = [{ token: tokenAddress.value as Hash, allowance: BigInt(amount.toString()) }];
+      approvalAmounts = [{ token: requestedToken as Hash, allowance: BigInt(amount.toString()) }];
       return approvalAmounts;
     }
 
@@ -158,11 +173,7 @@ export default (
       overrides.gasPrice = undefined;
     }
 
-    approvalAmounts = (await wallet.getDepositAllowanceParams(
-      tokenAddress.value!,
-      amount,
-      overrides
-    )) as TokenAllowance[];
+    approvalAmounts = (await wallet.getDepositAllowanceParams(requestedToken!, amount, overrides)) as TokenAllowance[];
 
     return approvalAmounts;
   };

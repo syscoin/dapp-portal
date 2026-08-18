@@ -537,10 +537,9 @@ const tokenBalance = computed<BigNumberish | undefined>(() => {
   return balance.value?.find((e) => e.address === selectedToken.value?.address)?.amount;
 });
 
-const syscoinTokenDepositSkipsAllowance = async () => {
-  const tokenAddress = selectedToken.value?.address;
+const syscoinTokenDepositSkipsAllowance = async (tokenAddress: string) => {
   const l1Network = eraNetwork.value.l1Network;
-  if (!isSyscoinBridgeNetwork(eraNetwork.value) || !tokenAddress || isSyscoinNativeToken(tokenAddress) || !l1Network) {
+  if (!isSyscoinBridgeNetwork(eraNetwork.value) || isSyscoinNativeToken(tokenAddress) || !l1Network) {
     return false;
   }
 
