@@ -98,6 +98,9 @@
     </TransactionProgress>
     <CommonHeightTransition :opened="withdrawalFinalizationAvailable">
       <div>
+        <CommonErrorBlock v-if="finalizeTransactionError" :retry-button="false" class="mt-2">
+          {{ finalizeTransactionError.message }}
+        </CommonErrorBlock>
         <CommonErrorBlock v-if="feeError" class="mt-2" @try-again="estimate">
           Fee estimation error: {{ feeError.message }}
         </CommonErrorBlock>
@@ -218,6 +221,7 @@ const {
   estimateFee: estimate,
 
   status: finalizeTransactionStatus,
+  error: finalizeTransactionError,
   transactionHash: finalizeTransactionHash,
   commitTransaction,
 } = useWithdrawalFinalization(computed(() => props.transaction));

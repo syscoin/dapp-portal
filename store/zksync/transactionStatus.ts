@@ -237,6 +237,9 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
         }
       }
 
+      // An unavailable nullifier read cannot invalidate a previously completed withdrawal.
+      if (transaction.info.completed && !finalizationStatus.checked) return transaction;
+
       updatedTransaction.info.failed = false;
       updatedTransaction.info.withdrawalFinalizationAvailable = !isFinalized;
       updatedTransaction.info.completed = isFinalized;
@@ -291,10 +294,12 @@ export const useZkSyncTransactionStatusStore = defineStore("zkSyncTransactionSta
     return transaction;
   };
   const refreshTransactionStatus = async (transaction: TransactionInfo) => {
-    // SYSCOIN: older local state may have marked a delayed deposit as failed
-    // while the L2 priority transaction was still pending. Re-check failed
-    // deposits so opening the transaction can recover and persist success.
-    if (transaction.info.completed && !(transaction.type === "deposit" && transaction.info.failed)) return transaction;
+    // Older UI state could mark a cancelled/reverted L1 claim as completed.
+    // Reopening a Syscoin withdrawal must reconcile that cache with the nullifier.
+    const recheckWithdrawal =
+      transaction.type === "withdrawal" && isSyscoinBridgeNetwork(eraNetwork.value) && !transaction.info.failed;
+    const recheckFailedDeposit = transaction.type === "deposit" && transaction.info.failed;
+    if (transaction.info.completed && !recheckFailedDeposit && !recheckWithdrawal) return transaction;
 
     if (transaction.type === "deposit") {
       transaction = await getDepositStatus(transaction);
