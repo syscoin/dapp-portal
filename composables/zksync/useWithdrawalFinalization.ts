@@ -186,6 +186,8 @@ export default (transactionInfo: ComputedRef<TransactionInfo>) => {
       });
 
       status.value = "sending";
+      // Keep replacement rejection across receipt retries, which may start from the new hash.
+      let replacementError: Error | undefined;
       const receipt = await retry(() =>
         onboardStore.getPublicClient().waitForTransactionReceipt({
           hash: transactionHash.value!,
@@ -194,9 +196,19 @@ export default (transactionInfo: ComputedRef<TransactionInfo>) => {
           timeout: isSyscoinBridgeNetwork(providerStore.eraNetwork) ? SYSCOIN_L1_RECEIPT_TIMEOUT : undefined,
           onReplaced: (replacement) => {
             transactionHash.value = replacement.transaction.hash;
+            if (replacement.reason !== "repriced") {
+              replacementError = new Error(
+                replacement.reason === "cancelled"
+                  ? "Withdrawal claim was cancelled."
+                  : "Withdrawal claim was replaced by another transaction."
+              );
+            }
           },
         })
       );
+
+      if (replacementError) throw replacementError;
+      if (receipt.status !== "success") throw new Error("Withdrawal claim transaction failed.");
 
       trackEvent("withdrawal-finalized", {
         token: transactionInfo.value!.token.symbol,
