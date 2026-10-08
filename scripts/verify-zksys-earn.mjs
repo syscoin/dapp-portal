@@ -1,15 +1,16 @@
 /* eslint-disable no-console */
 // SYSCOIN: one-off sanity check of zkSYS Earn reads against live Tanenbaum
-// contracts. Run with: node --experimental-strip-types scripts/verify-zksys-earn.mjs
+// contracts. SYSCOIN: fresh v32 addresses match data/zksys.ts.
+// Run with: node --experimental-strip-types scripts/verify-zksys-earn.mjs
 import { createPublicClient, formatUnits, http, parseAbi } from "viem";
 
 const client = createPublicClient({ transport: http("https://rpc-zk.tanenbaum.io") });
 
-const issuer = "0x9e40c2d8523A4770A702BBD26d1ddf8539B9aEf5";
-const registry = "0xB7fc270CBf9e47c1157c205aa25341cce4280f9C";
-const vault = "0xC94d9C7A71037bAa1Ceb0a3ca4B0C241b8b41C6B";
+const issuer = "0xe9b333f491325bc388e049e199d4b2e325893c36";
+const registry = "0xf321225f85342c4a77a2b6882b7f34aa6c70482a";
+const vault = "0x459b3873bdf3cc81f647bb40b67417af99de934a";
 const token = "0x6EBb170f69D886916D9ee9E585CE39E626CbC35d";
-const membership = "0x0b8647BB8f5A25D1e2a599c7805D39Dc0D876b7B";
+const membership = "0xc3eadb6c606a9e2a487d877e1ad37d7c3b6bb598";
 
 const issuerAbi = parseAbi([
   "function currentPeriod() view returns (uint256)",
