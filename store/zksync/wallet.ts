@@ -126,7 +126,7 @@ export const useZkSyncWalletStore = defineStore("zkSyncWallet", () => {
       return balance;
     });
   };
-  const getBalancesFromSyscoinBlockscout = async (): Promise<TokenAmount[]> => {
+  const getBalancesFromSyscoinBlockscout = async (previousBalances: TokenAmount[]): Promise<TokenAmount[]> => {
     await tokensStore.requestTokens();
     if (!tokens.value) throw new Error("Tokens are not available");
     const accountAddress = account.value.address;
@@ -167,19 +167,27 @@ export const useZkSyncWalletStore = defineStore("zkSyncWallet", () => {
     // and let those values override stale/missing explorer rows.
     // SYSCOIN: an optional explorer-discovered ERC20 may revert. Keep other
     // balances and its explorer value instead of failing the whole wallet.
+    const rpcTokens = registry.l2Tokens.filter(
+      (token) => token.address.toUpperCase() !== L2_BASE_TOKEN_ADDRESS.toUpperCase()
+    );
     const officialRpcResults = await Promise.allSettled(
-      registry.l2Tokens
-        .filter((token) => token.address.toUpperCase() !== L2_BASE_TOKEN_ADDRESS.toUpperCase())
-        .map(async (token) => ({
-          ...token,
-          amount: (await provider.getBalance(accountAddress, undefined, token.address)).toString(),
-        }))
+      rpcTokens.map(async (token) => ({
+        ...token,
+        amount: (await provider.getBalance(accountAddress, undefined, token.address)).toString(),
+      }))
     );
     const officialRpcBalances = officialRpcResults.flatMap((result) =>
       result.status === "fulfilled" ? [result.value] : []
     );
+    // SYSCOIN: retain same-account/network last-known values only for failed reads.
+    // Fresh explorer and successful RPC values still take precedence.
+    const previousByAddress = new Map(previousBalances.map((token) => [token.address.toLowerCase(), token]));
+    const failedRpcFallbacks = officialRpcResults.flatMap((result, index) => {
+      const previous = previousByAddress.get(rpcTokens[index].address.toLowerCase());
+      return result.status === "rejected" && previous ? [previous] : [];
+    });
     const balancesByAddress = new Map(
-      [...nativeBalance, ...mappedBlockscoutBalances, ...officialRpcBalances].map((balance) => [
+      [...failedRpcFallbacks, ...nativeBalance, ...mappedBlockscoutBalances, ...officialRpcBalances].map((balance) => [
         balance.address.toLowerCase(),
         balance,
       ])
@@ -187,6 +195,8 @@ export const useZkSyncWalletStore = defineStore("zkSyncWallet", () => {
 
     return Array.from(balancesByAddress.values());
   };
+  let balancesContext: string | undefined;
+  const currentBalancesContext = () => `${eraNetwork.value.id}:${account.value.address?.toLowerCase()}`;
   const {
     result: balancesResult,
     inProgress: balanceInProgress,
@@ -196,7 +206,11 @@ export const useZkSyncWalletStore = defineStore("zkSyncWallet", () => {
   } = usePromise<TokenAmount[]>(
     async () => {
       if (isSyscoinBridgeNetwork(eraNetwork.value)) {
-        return await getBalancesFromSyscoinBlockscout();
+        const context = currentBalancesContext();
+        const previous = context === balancesContext ? balancesResult.value ?? [] : [];
+        const result = await getBalancesFromSyscoinBlockscout(previous);
+        if (context === currentBalancesContext()) balancesContext = context;
+        return result;
       } else if (eraNetwork.value.blockExplorerApi) {
         return await getBalancesFromBlockExplorerApi();
       } else {

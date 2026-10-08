@@ -47,11 +47,12 @@ export default <ResultType, ErrorType = Error>(fn: () => Promise<ResultType>, op
       rawResult = await requestPromise;
       if (requestGeneration === generation) result.value = rawResult;
     } catch (e) {
+      // SYSCOIN: filtered wallet rejections must still evict the current promise.
+      if (requestGeneration === generation) promise = undefined;
       const err = formatError(e as Error);
       if (!err) return;
 
       if (requestGeneration === generation) {
-        promise = undefined;
         error.value = err as unknown as ErrorType;
         captureException({
           error: err,

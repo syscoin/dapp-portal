@@ -90,4 +90,34 @@ describe("optional registry token balance failures", () => {
     expect(wallet.balance.find((token) => token.address === broken.address)?.amount).toBe("300");
     expect(wallet.balanceError).toBeUndefined();
   });
+
+  it("retains a previous balance when neither RPC nor the explorer supplies a new value", async () => {
+    mocks.getBalance.mockResolvedValue(300n);
+    const wallet = scope.run(() => useWallet())!;
+    await wallet.requestBalance();
+    mocks.balances.mockResolvedValue([]);
+    mocks.getBalance.mockImplementation((_account, _block, token) =>
+      token === broken.address ? Promise.reject(new Error("RPC timeout")) : Promise.resolve(200n)
+    );
+    await wallet.requestBalance({ force: true });
+    expect(wallet.balance.find((token) => token.address === broken.address)?.amount).toBe("300");
+    expect(wallet.balance.find((token) => token.address === good.address)?.amount).toBe("200");
+  });
+
+  it.each(["account", "network"])("never borrows a previous %s context's balance", async (changed) => {
+    mocks.getBalance.mockResolvedValue(300n);
+    const wallet = scope.run(() => useWallet())!;
+    await wallet.requestBalance();
+    mocks.balances.mockResolvedValue([]);
+    mocks.getBalance.mockImplementation((_account, _block, token) =>
+      token === broken.address ? Promise.reject(new Error("RPC timeout")) : Promise.resolve(200n)
+    );
+    if (changed === "account") {
+      useOnboardStore().account.address = broken.address;
+    } else {
+      useZkSyncProviderStore().eraNetwork.id = 3250;
+    }
+    await wallet.requestBalance({ force: true });
+    expect(wallet.balance.find((token) => token.address === broken.address)?.amount).not.toBe("300");
+  });
 });

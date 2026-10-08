@@ -97,4 +97,14 @@ describe("usePromise request isolation", () => {
     expect(request.inProgress.value).toBe(false);
     expect(await request.execute()).toBe("retry");
   });
+
+  it("evicts a filtered wallet rejection so the current request can retry", async () => {
+    vi.stubGlobal("formatError", () => undefined);
+    const fn = vi.fn().mockRejectedValueOnce(new Error("User rejected")).mockResolvedValue("retry");
+    const request = usePromise<string>(fn);
+    expect(await request.execute()).toBeUndefined();
+    expect(request.error.value).toBeUndefined();
+    expect(await request.execute()).toBe("retry");
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
 });
