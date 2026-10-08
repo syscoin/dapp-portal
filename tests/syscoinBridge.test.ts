@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { concatHex, encodeAbiParameters, toEventSelector, toFunctionSelector } from "viem";
 import { describe, it } from "vitest";
 
-import { getSyscoinTanenbaumFaucetUrl, SYSCOIN_TANENBAUM_FAUCET_URL } from "../data/syscoin";
+import { getSyscoinTanenbaumFaucetUrl, SYSCOIN_TANENBAUM_FAUCET_URL, syscoinTanenbaumBridge } from "../data/syscoin";
+import { zkSysEarnContracts } from "../data/zksys";
 import {
   SYSCOIN_DEFAULT_L1_ERC20_DEPOSIT_GAS_LIMIT,
   SYSCOIN_DEFAULT_L2_PRIORITY_FEE,
@@ -40,6 +41,19 @@ const baseCost = 42_000_000_000_000n;
 const assetId = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 describe("syscoin bridge encoding", () => {
+  // SYSCOIN: The clean v32 deployment must not silently reuse retired v31 pins.
+  it("pins the qualified fresh v32 bridge and Earn deployments", () => {
+    assert.equal(syscoinTanenbaumBridge.bridgehubAddress, "0x212816f0d638316beeb6fcd1f7baa03fab3b54a5");
+    assert.equal(syscoinTanenbaumBridge.sharedBridgeAddress, "0x6b3660f2aab5c19c6e8d84dd17d4c840e83e31e3");
+    assert.equal(syscoinTanenbaumBridge.l1NullifierAddress, "0xf9ae1986379c9408d53cf10d6c3dd7228ba74ea4");
+    const earn = zkSysEarnContracts["syscoin-tanenbaum-zksys"];
+    assert.equal(earn.membershipRegistry, "0xc3eadb6c606a9e2a487d877e1ad37d7c3b6bb598");
+    assert.equal(earn.rewardWeightRegistry, "0xf321225f85342c4a77a2b6882b7f34aa6c70482a");
+    assert.equal(earn.issuer, "0xe9b333f491325bc388e049e199d4b2e325893c36");
+    assert.equal(earn.stakingVault, "0x459b3873bdf3cc81f647bb40b67417af99de934a");
+    assert.equal(earn.gasTank, "0xb49943ea232624dd4aa63e18186076c6c99a68ef");
+  });
+
   it("uses a non-zero probe to estimate an empty withdrawal form without changing real amounts", () => {
     assert.equal(getSyscoinWithdrawalFeeEstimationAmount(0n), 1n);
     assert.equal(getSyscoinWithdrawalFeeEstimationAmount(amount), amount);

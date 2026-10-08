@@ -5,15 +5,15 @@ import { L2_BASE_TOKEN_ADDRESS } from "../utils/constants";
 import type { Token } from "../types";
 
 // SYSCOIN: canonical Tanenbaum bridge constants shared by client config and
-// server-side registry caching.
+// server-side registry caching. SYSCOIN: fresh v32 deployment; v31 was replaced.
 export const syscoinTanenbaumBridge = {
   gatewayRpcUrl: "https://rpc-gw.tanenbaum.io",
   l1BlockscoutApiUrl: "https://explorer.tanenbaum.io/api/v2",
   l2BlockscoutApiUrl: "https://explorer-zk.tanenbaum.io/api/v2",
   l2RpcUrl: "https://rpc-zk.tanenbaum.io",
-  bridgehubAddress: "0x9ea2670685a2e3534bdaa114e1cb619ea5cf624f",
-  sharedBridgeAddress: "0xc769c7b29543393f2e2cb209a07721b62cdd94fa",
-  l1NullifierAddress: "0xa7d7381b7fb1ff64600d7a7215ddf2286a1c84ee",
+  bridgehubAddress: "0x212816f0d638316beeb6fcd1f7baa03fab3b54a5",
+  sharedBridgeAddress: "0x6b3660f2aab5c19c6e8d84dd17d4c840e83e31e3",
+  l1NullifierAddress: "0xf9ae1986379c9408d53cf10d6c3dd7228ba74ea4",
   l2ChainId: 57057,
 } as const;
 
