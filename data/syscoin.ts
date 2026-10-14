@@ -48,4 +48,14 @@ export const syscoinTanenbaumTokens: Token[] = [
     decimals: 18,
     iconUrl: "/img/zksys-icon.svg",
   },
+  // SYSCOIN: The accepted v32 USDC bridge pair, not a symbol-based fallback.
+  {
+    address: "0xd501e86b1fc5823403b2ba995e2b8b78179236a6",
+    l1Address: "0xB26B0EC48ed88347ed89874411cAE4A1EcdF97fd",
+    l2Address: "0xd501e86b1fc5823403b2ba995e2b8b78179236a6",
+    symbol: "USDC",
+    name: "USD Coin",
+    decimals: 6,
+    iconUrl: "/img/usdc-icon.svg",
+  },
 ];
