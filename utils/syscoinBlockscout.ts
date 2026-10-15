@@ -1,11 +1,137 @@
 import { $fetch } from "ofetch";
-import { getAddress, isAddress, isAddressEqual, zeroAddress } from "viem";
+import {
+  encodeAbiParameters,
+  getAddress,
+  isAddress,
+  isAddressEqual,
+  keccak256,
+  parseAbi,
+  zeroAddress,
+  zeroHash,
+} from "viem";
 
-import { L2_ASSET_ROUTER_ADDRESS } from "./constants";
-import { SYSCOIN_L2_ASSET_ROUTER_ABI } from "./syscoinBridge";
+import { L2_ASSET_ROUTER_ADDRESS, L2_NATIVE_TOKEN_VAULT_ADDRESS } from "./constants";
+import { SYSCOIN_L1_ASSET_ROUTER_ABI, SYSCOIN_L2_ASSET_ROUTER_ABI } from "./syscoinBridge";
 
 import type { Token, TokenAmount } from "@/types";
 import type { PublicClient } from "viem";
+
+const NATIVE_TOKEN_MAPPING_ABI = parseAbi([
+  "function assetId(address token) view returns (bytes32)",
+  "function tokenAddress(bytes32 assetId) view returns (address)",
+  "function originChainId(bytes32 assetId) view returns (uint256)",
+  "function originToken(bytes32 assetId) view returns (address)",
+]);
+
+export type SyscoinRegisteredMappingContext = {
+  l1PublicClient: PublicClient;
+  l1AssetRouterAddress: `0x${string}`;
+  l1ChainId: number;
+  l2ChainId: number;
+};
+
+// Bind both clients to the configured chains and use one block per chain. A
+// failed identity/read check must not silently become a legacy address guess.
+const prepareRegisteredMappings = async (l2PublicClient: PublicClient, context: SyscoinRegisteredMappingContext) => {
+  const [l1ChainId, l2ChainId, l1Block, l2Block] = await Promise.all([
+    context.l1PublicClient.getChainId(),
+    l2PublicClient.getChainId(),
+    context.l1PublicClient.getBlockNumber(),
+    l2PublicClient.getBlockNumber(),
+  ]);
+  if (l1ChainId !== context.l1ChainId || l2ChainId !== context.l2ChainId) {
+    throw new Error("Unexpected Syscoin token registry chain");
+  }
+  const l1Vault = await context.l1PublicClient.readContract({
+    address: context.l1AssetRouterAddress,
+    abi: SYSCOIN_L1_ASSET_ROUTER_ABI,
+    functionName: "nativeTokenVault",
+    blockNumber: l1Block,
+  });
+  if (isAddressEqual(l1Vault, zeroAddress)) throw new Error("Missing Syscoin native token vault");
+  const codes = await Promise.all([
+    context.l1PublicClient.getCode({ address: l1Vault, blockNumber: l1Block }),
+    l2PublicClient.getCode({ address: L2_NATIVE_TOKEN_VAULT_ADDRESS, blockNumber: l2Block }),
+  ]);
+  if (codes.some((code) => !code || code === "0x")) throw new Error("Missing Syscoin native token vault code");
+
+  const l1Read = (functionName: "assetId" | "tokenAddress" | "originChainId" | "originToken", args: [`0x${string}`]) =>
+    context.l1PublicClient.readContract({
+      address: l1Vault,
+      abi: NATIVE_TOKEN_MAPPING_ABI,
+      functionName,
+      args,
+      blockNumber: l1Block,
+    });
+  const l2Read = (functionName: "assetId" | "tokenAddress" | "originChainId" | "originToken", args: [`0x${string}`]) =>
+    l2PublicClient.readContract({
+      address: L2_NATIVE_TOKEN_VAULT_ADDRESS,
+      abi: NATIVE_TOKEN_MAPPING_ABI,
+      functionName,
+      args,
+      blockNumber: l2Block,
+    });
+  const legacyAddress = (l1Token: `0x${string}`) =>
+    l2PublicClient.readContract({
+      address: L2_ASSET_ROUTER_ADDRESS,
+      abi: SYSCOIN_L2_ASSET_ROUTER_ABI,
+      functionName: "l2TokenAddress",
+      args: [l1Token],
+      blockNumber: l2Block,
+    });
+
+  return async (l1Token: `0x${string}`): Promise<`0x${string}` | undefined> => {
+    const assetId = await l1Read("assetId", [l1Token]);
+    // Unregistered Root-native tokens retain the existing first-deposit path.
+    if (assetId === zeroHash) {
+      // An indexer can be ahead of this RPC snapshot. An address with no code
+      // here is not evidence of an unregistered Root-native ERC20.
+      const code = await context.l1PublicClient.getCode({ address: l1Token, blockNumber: l1Block });
+      return code && code !== "0x" ? legacyAddress(l1Token) : undefined;
+    }
+    const [rootToken, originChainId, originToken, l2Token] = await Promise.all([
+      l1Read("tokenAddress", [assetId as `0x${string}`]),
+      l1Read("originChainId", [assetId as `0x${string}`]),
+      l1Read("originToken", [assetId as `0x${string}`]),
+      l2Read("tokenAddress", [assetId as `0x${string}`]),
+    ]);
+    if (
+      typeof originChainId !== "bigint" ||
+      originChainId <= 0n ||
+      !isAddressEqual(rootToken as `0x${string}`, l1Token) ||
+      isAddressEqual(originToken as `0x${string}`, zeroAddress)
+    )
+      return;
+    const expectedAssetId = keccak256(
+      encodeAbiParameters(
+        [{ type: "uint256" }, { type: "address" }, { type: "address" }],
+        [originChainId, L2_NATIVE_TOKEN_VAULT_ADDRESS, originToken as `0x${string}`]
+      )
+    );
+    if (assetId !== expectedAssetId) return;
+    if (originChainId === BigInt(l1ChainId) && !isAddressEqual(originToken as `0x${string}`, l1Token)) return;
+    if (isAddressEqual(l2Token as `0x${string}`, zeroAddress)) {
+      // Only a proven Root-origin asset may use an undeployed first-deposit address.
+      return originChainId === BigInt(l1ChainId) ? legacyAddress(l1Token) : undefined;
+    }
+    const [reverseId, edgeOriginChainId, edgeOriginToken, code] = await Promise.all([
+      l2Read("assetId", [l2Token as `0x${string}`]),
+      l2Read("originChainId", [assetId as `0x${string}`]),
+      l2Read("originToken", [assetId as `0x${string}`]),
+      l2PublicClient.getCode({ address: l2Token as `0x${string}`, blockNumber: l2Block }),
+    ]);
+    if (
+      reverseId !== assetId ||
+      edgeOriginChainId !== originChainId ||
+      !isAddressEqual(edgeOriginToken as `0x${string}`, originToken as `0x${string}`) ||
+      !code ||
+      code === "0x" ||
+      (originChainId === BigInt(l2ChainId) && !isAddressEqual(originToken as `0x${string}`, l2Token as `0x${string}`))
+    )
+      return;
+    return getAddress(l2Token as `0x${string}`);
+  };
+};
 
 type BlockscoutToken = {
   address?: string;
@@ -152,42 +278,54 @@ export const fetchSyscoinTokenRegistry = async () => {
 export const resolveSyscoinL2TokenMappings = async (
   publicClient: PublicClient,
   l1Tokens: Token[],
-  officialTokens: Token[] = []
+  officialTokens: Token[] = [],
+  registeredContext?: SyscoinRegisteredMappingContext
 ) => {
   const mappings = new Map<string, Token>();
+  const registeredAddress = registeredContext
+    ? await prepareRegisteredMappings(publicClient, registeredContext)
+    : undefined;
 
+  // Each token has at most four simultaneous reads. Bound token workers too:
+  // batching alone limits envelope size, not the number of envelopes in flight.
+  let nextToken = 0;
+  const resolveToken = async (l1Token: Token) => {
+    const l1Address = getAddress(l1Token.l1Address || l1Token.address);
+    if (isAddressEqual(l1Address, zeroAddress)) return;
+
+    const officialToken = matchingOfficialToken(l1Address, "L1", officialTokens);
+    const l2Address = officialToken?.l2Address
+      ? officialToken.l2Address
+      : registeredAddress
+      ? await registeredAddress(l1Address).catch(() => undefined)
+      : await publicClient
+          .readContract({
+            address: L2_ASSET_ROUTER_ADDRESS,
+            abi: SYSCOIN_L2_ASSET_ROUTER_ABI,
+            functionName: "l2TokenAddress",
+            args: [l1Address],
+          })
+          .catch(() => undefined);
+
+    if (!l2Address || isAddressEqual(getAddress(l2Address), zeroAddress)) return;
+
+    // SYSCOIN: an L1 wrapper can be unknown to Blockscout while its L2 token
+    // is already part of the curated registry. Preserve the official L2
+    // metadata when resolving future wrapper mappings.
+    const officialL2Token = matchingOfficialToken(l2Address, "L2", officialTokens);
+    mappings.set(l1Address.toLowerCase(), {
+      ...l1Token,
+      name: officialL2Token?.name || l1Token.name,
+      symbol: officialL2Token?.symbol || l1Token.symbol,
+      decimals: officialL2Token?.decimals ?? l1Token.decimals,
+      iconUrl: officialL2Token?.iconUrl || l1Token.iconUrl,
+      l1Address,
+      l2Address: getAddress(l2Address),
+    });
+  };
   await Promise.all(
-    l1Tokens.map(async (l1Token) => {
-      const l1Address = getAddress(l1Token.l1Address || l1Token.address);
-      if (isAddressEqual(l1Address, zeroAddress)) return;
-
-      const officialToken = matchingOfficialToken(l1Address, "L1", officialTokens);
-      const l2Address = officialToken?.l2Address
-        ? officialToken.l2Address
-        : await publicClient
-            .readContract({
-              address: L2_ASSET_ROUTER_ADDRESS,
-              abi: SYSCOIN_L2_ASSET_ROUTER_ABI,
-              functionName: "l2TokenAddress",
-              args: [l1Address],
-            })
-            .catch(() => undefined);
-
-      if (!l2Address || isAddressEqual(getAddress(l2Address), zeroAddress)) return;
-
-      // SYSCOIN: an L1 wrapper can be unknown to Blockscout while its L2 token
-      // is already part of the curated registry. Preserve the official L2
-      // metadata when resolving future wrapper mappings.
-      const officialL2Token = matchingOfficialToken(l2Address, "L2", officialTokens);
-      mappings.set(l1Address.toLowerCase(), {
-        ...l1Token,
-        name: officialL2Token?.name || l1Token.name,
-        symbol: officialL2Token?.symbol || l1Token.symbol,
-        decimals: officialL2Token?.decimals ?? l1Token.decimals,
-        iconUrl: officialL2Token?.iconUrl || l1Token.iconUrl,
-        l1Address,
-        l2Address: getAddress(l2Address),
-      });
+    Array.from({ length: Math.min(8, l1Tokens.length) }, async () => {
+      while (nextToken < l1Tokens.length) await resolveToken(l1Tokens[nextToken++]);
     })
   );
 
@@ -197,9 +335,10 @@ export const resolveSyscoinL2TokenMappings = async (
 export const attachSyscoinL2MappingsToL1Tokens = async (
   publicClient: PublicClient,
   l1Tokens: Token[],
-  officialTokens: Token[] = []
+  officialTokens: Token[] = [],
+  registeredContext?: SyscoinRegisteredMappingContext
 ) => {
-  const mappings = await resolveSyscoinL2TokenMappings(publicClient, l1Tokens, officialTokens);
+  const mappings = await resolveSyscoinL2TokenMappings(publicClient, l1Tokens, officialTokens, registeredContext);
 
   return l1Tokens.map((token) => {
     const mappedToken = mappings.get(getAddress(token.address).toLowerCase());

@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-import { getAddress } from "viem";
+import { encodeAbiParameters, getAddress, keccak256, zeroAddress, zeroHash } from "viem";
 import { $fetch } from "ofetch";
 import { beforeEach, describe, it, vi } from "vitest";
 
 import { customBridgeTokens } from "../data/customBridgeTokens";
 import { syscoinTanenbaumTokens } from "../data/syscoin";
+import { L2_ASSET_ROUTER_ADDRESS, L2_NATIVE_TOKEN_VAULT_ADDRESS } from "../utils/constants";
 import {
   attachSyscoinL1MappingsToL2Tokens,
   fetchSyscoinBlockscoutTokenBalances,
@@ -35,6 +36,180 @@ const officialTokens = [
     decimals: 18,
   },
 ];
+
+function registeredFixture(originChainId = 57057n) {
+  const l1Token = "0x1111111111111111111111111111111111111111";
+  const l2Token = "0x2222222222222222222222222222222222222222";
+  const vault = "0x3333333333333333333333333333333333333333";
+  const router = "0x4444444444444444444444444444444444444444";
+  const originToken = originChainId === 5700n ? l1Token : l2Token;
+  const assetId = keccak256(
+    encodeAbiParameters(
+      [{ type: "uint256" }, { type: "address" }, { type: "address" }],
+      [originChainId, L2_NATIVE_TOKEN_VAULT_ADDRESS, originToken]
+    )
+  );
+  const rootValues: Record<string, unknown> = { assetId, tokenAddress: l1Token, originChainId, originToken };
+  const edgeValues: Record<string, unknown> = { assetId, tokenAddress: l2Token, originChainId, originToken };
+  const calls: Array<{ side: string; functionName?: string; address: string; blockNumber?: bigint }> = [];
+  const client = (side: string, values: Record<string, unknown>, chainId: number, block: bigint) => ({
+    getChainId: vi.fn(async () => chainId),
+    getBlockNumber: vi.fn(async () => block),
+    getCode: vi.fn(async (request: any) => {
+      calls.push({ side, ...request });
+      return "0x6000";
+    }),
+    readContract: vi.fn(async (request: any) => {
+      calls.push({ side, ...request });
+      if (request.functionName === "nativeTokenVault") {
+        assert.equal(side, "root");
+        assert.equal(request.address, router);
+        return vault;
+      }
+      if (request.functionName === "l2TokenAddress") {
+        assert.equal(request.address, L2_ASSET_ROUTER_ADDRESS);
+        return l2Token;
+      }
+      assert.equal(request.address, side === "root" ? vault : L2_NATIVE_TOKEN_VAULT_ADDRESS);
+      return values[request.functionName];
+    }),
+  });
+  const root = client("root", rootValues, 5700, 100n);
+  const edge = client("edge", edgeValues, 57057, 200n);
+  const context = {
+    l1PublicClient: root as any,
+    l1AssetRouterAddress: router as `0x${string}`,
+    l1ChainId: 5700,
+    l2ChainId: 57057,
+  };
+  const token = { address: l1Token, symbol: "UNKNOWN", decimals: 18 };
+  const resolve = (official: typeof officialTokens = []) =>
+    resolveSyscoinL2TokenMappings(edge as any, [token], official, context);
+  return { root, edge, rootValues, edgeValues, l1Token, l2Token, originToken, assetId, calls, context, token, resolve };
+}
+
+describe("registered cross-chain NativeTokenVault mapping", () => {
+  it("bounds token read fanout independently of JSON-RPC batching", async () => {
+    let active = 0,
+      maximum = 0;
+    const client = {
+      readContract: vi.fn(async () => {
+        maximum = Math.max(maximum, ++active);
+        await new Promise<void>((resolve) => setTimeout(resolve, 1));
+        active--;
+        return "0x2222222222222222222222222222222222222222";
+      }),
+    };
+    const tokens = Array.from({ length: 40 }, (_, index) => ({
+      address: `0x${(index + 1).toString(16).padStart(40, "0")}`,
+      symbol: "TEST",
+      decimals: 18,
+    }));
+    assert.equal((await resolveSyscoinL2TokenMappings(client as any, tokens)).size, 40);
+    assert.equal(maximum, 8);
+    const handler = readFileSync(new URL("../server/api/syscoin/token-registry.get.ts", import.meta.url), "utf8");
+    assert.equal(handler.match(/batch: \{ batchSize: 32 \}/g)?.length, 2);
+  });
+
+  it("resolves arbitrary Edge-origin Root representations without the legacy prediction", async () => {
+    const fixture = registeredFixture();
+    const mappings = await fixture.resolve();
+    assert.equal(mappings.get(fixture.l1Token)?.l2Address, fixture.l2Token);
+    assert.ok(!fixture.calls.some((call) => call.functionName === "l2TokenAddress"));
+    assert.ok(fixture.calls.every((call) => call.blockNumber === (call.side === "root" ? 100n : 200n)));
+  });
+
+  it("keeps curated Edge metadata while adding its discovered Root mapping after merge", async () => {
+    const fixture = registeredFixture();
+    const curated = {
+      address: fixture.l2Token,
+      l2Address: fixture.l2Token,
+      symbol: "CURATED",
+      decimals: 18,
+      iconUrl: "/img/token.svg",
+    };
+    const mappings = await fixture.resolve([curated] as any);
+    const mapped = mappings.get(fixture.l1Token)!;
+    assert.equal(mapped.symbol, "CURATED");
+    const [edge] = attachSyscoinL1MappingsToL2Tokens(mergeSyscoinTokens([curated], [{ ...curated, symbol: "WRONG" }]), [
+      mapped,
+    ]);
+    assert.equal(edge.l1Address, fixture.l1Token);
+    assert.equal(edge.iconUrl, "/img/token.svg");
+  });
+
+  it("preserves a deployed Root-origin counterpart and both first-deposit cases", async () => {
+    const deployed = registeredFixture(5700n);
+    assert.equal((await deployed.resolve()).get(deployed.l1Token)?.l2Address, deployed.l2Token);
+    assert.ok(!deployed.calls.some((call) => call.functionName === "l2TokenAddress"));
+    for (const registered of [false, true]) {
+      const fixture = registeredFixture(5700n);
+      if (registered) fixture.edgeValues.tokenAddress = zeroAddress;
+      else fixture.rootValues.assetId = zeroHash;
+      assert.equal((await fixture.resolve()).get(fixture.l1Token)?.l2Address, fixture.l2Token);
+      assert.equal(fixture.calls.filter((call) => call.functionName === "l2TokenAddress").length, 1);
+    }
+  });
+
+  it.each([
+    ["missing Edge counterpart", "edge", "tokenAddress", zeroAddress],
+    ["wrong Root reverse address", "root", "tokenAddress", zeroAddress],
+    ["wrong Edge reverse asset", "edge", "assetId", zeroHash],
+    ["wrong Edge origin chain", "edge", "originChainId", 5700n],
+    ["wrong Edge origin token", "edge", "originToken", zeroAddress],
+    ["invalid Root asset encoding", "root", "assetId", `0x${"aa".repeat(32)}`],
+  ])("does not turn %s into a legacy mapping", async (_name, side, field, value) => {
+    const fixture = registeredFixture();
+    (side === "root" ? fixture.rootValues : fixture.edgeValues)[field as string] = value;
+    assert.equal((await fixture.resolve()).size, 0);
+    assert.ok(!fixture.calls.some((call) => call.functionName === "l2TokenAddress"));
+  });
+
+  it("does not fall back after an unavailable registered read or undeployed Edge token", async () => {
+    const unavailable = registeredFixture();
+    unavailable.root.readContract.mockRejectedValueOnce(new Error("RPC unavailable"));
+    await assert.rejects(unavailable.resolve(), /RPC unavailable/);
+    const perToken = registeredFixture();
+    const actualRead = perToken.root.readContract.getMockImplementation()!;
+    perToken.root.readContract.mockImplementation(async (request) => {
+      if (request.functionName === "assetId") throw new Error("RPC unavailable");
+      return actualRead(request);
+    });
+    assert.equal((await perToken.resolve()).size, 0);
+    assert.ok(!perToken.calls.some((call) => call.functionName === "l2TokenAddress"));
+    const missingCode = registeredFixture();
+    missingCode.edge.getCode.mockImplementation(async (request) =>
+      request.address === L2_NATIVE_TOKEN_VAULT_ADDRESS ? "0x6000" : "0x"
+    );
+    assert.equal((await missingCode.resolve()).size, 0);
+  });
+
+  it.each([false, true])(
+    "does not predict an unregistered token when Root code is missing or unreadable (%s)",
+    async (unreadable) => {
+      const fixture = registeredFixture(5700n);
+      fixture.rootValues.assetId = zeroHash;
+      fixture.root.getCode.mockImplementation(async (request) => {
+        if (request.address === fixture.l1Token) {
+          if (unreadable) throw new Error("RPC unavailable");
+          return "0x";
+        }
+        return "0x6000";
+      });
+      assert.equal((await fixture.resolve()).size, 0);
+      assert.ok(!fixture.calls.some((call) => call.functionName === "l2TokenAddress"));
+    }
+  );
+
+  it("rejects wrong configured chains and missing vault code before mapping", async () => {
+    const wrongChain = registeredFixture();
+    wrongChain.edge.getChainId.mockResolvedValue(1);
+    await assert.rejects(wrongChain.resolve(), /Unexpected Syscoin token registry chain/);
+    const noVault = registeredFixture();
+    noVault.root.getCode.mockResolvedValue("0x");
+    await assert.rejects(noVault.resolve(), /Missing Syscoin native token vault code/);
+  });
+});
 
 describe("syscoin Blockscout mapping", () => {
   beforeEach(() => {
