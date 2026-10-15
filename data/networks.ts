@@ -34,13 +34,13 @@ export const l1Networks = {
     },
   },
   tanenbaum: {
-    id: 5700,
+    id: syscoinTanenbaumBridge.l1ChainId,
     name: "Syscoin Tanenbaum",
     network: "tanenbaum",
     nativeCurrency: { name: "Tanenbaum Syscoin", symbol: "TSYS", decimals: 18 },
     rpcUrls: {
-      default: { http: ["https://rpc.tanenbaum.io"] },
-      public: { http: ["https://rpc.tanenbaum.io"] },
+      default: { http: [syscoinTanenbaumBridge.l1RpcUrl] },
+      public: { http: [syscoinTanenbaumBridge.l1RpcUrl] },
     },
     blockExplorers: {
       default: {

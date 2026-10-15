@@ -7,6 +7,8 @@ import type { Token } from "../types";
 // SYSCOIN: canonical Tanenbaum bridge constants shared by client config and
 // server-side registry caching. SYSCOIN: fresh v32 deployment; v31 was replaced.
 export const syscoinTanenbaumBridge = {
+  l1ChainId: 5700,
+  l1RpcUrl: "https://rpc.tanenbaum.io",
   gatewayRpcUrl: "https://rpc-gw.tanenbaum.io",
   l1BlockscoutApiUrl: "https://explorer.tanenbaum.io/api/v2",
   l2BlockscoutApiUrl: "https://explorer-zk.tanenbaum.io/api/v2",
