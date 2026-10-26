@@ -12,7 +12,7 @@
 
 ## Development
 
-**Prerequisites:** Node.js version 20+, npm version 7+
+**Prerequisites:** Node.js 26.12.1 (see `.nvmrc`) and npm 11+
 
 1. Clone the Portal repository and set it up:
    ```bash
@@ -98,3 +98,9 @@ Contributions are welcome through the [Syscoin dapp-portal repository](https://g
 ## License
 
 Released under the [MIT License](https://github.com/syscoin/dapp-portal/blob/main/LICENSE).
+
+## Manual Node deployment
+
+The live Nuxt server uses `Dockerfile.ssr`; the existing `Dockerfile` serves a static generated site. Both use patched Node 26 and should be built with `docker build --pull`. Keep existing public build inputs and runtime configuration when changing the runtime. A repository merge does not recreate manually deployed containers.
+
+The inherited Matter Labs publishing/Firebase jobs are restricted to that upstream repository. This fork has its own Node validation workflow and does not publish to Matter Labs projects.
