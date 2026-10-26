@@ -4,6 +4,7 @@ RUN node -e 'const [major, minor, patch] = process.versions.node.split(".").map(
 
 FROM base AS build
 WORKDIR /app
+RUN apk add --no-cache python3 make g++
 ARG WALLET_CONNECT_PROJECT_ID
 ARG PORTAL_URL
 ARG GIT_REPO_URL
