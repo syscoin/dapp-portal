@@ -10,6 +10,7 @@ name: Deploy Package to Preview
 
 jobs:
   deploy:
+    if: github.repository == 'matter-labs/dapp-portal'
     name: Deploy
     runs-on: ubuntu-latest
     outputs:

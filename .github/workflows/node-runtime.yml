@@ -1,0 +1,32 @@
+name: Node runtime
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    name: Node 26 tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --force
+      - run: npm run test:syscoin
+  docker:
+    name: Node 26 image (${{ matrix.recipe }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        recipe: [Dockerfile, Dockerfile.ssr]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build with a fresh patched base
+        run: docker build --pull -f '${{ matrix.recipe }}' -t portal-node26:test .
+      - name: Verify image runtime
+        run: docker run --rm --network none --entrypoint node portal-node26:test -e 'const [major, minor, patch] = process.versions.node.split(".").map(Number); if (major !== 26 || minor < 12 || (minor === 12 && patch < 1)) throw new Error("Unexpected Node runtime"); console.log(process.version)'

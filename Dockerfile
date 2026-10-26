@@ -1,4 +1,5 @@
-FROM node:18.17.1-alpine AS base-stage
+FROM node:26-alpine AS base-stage
+RUN node -e 'const [major, minor, patch] = process.versions.node.split(".").map(Number); if (major !== 26 || minor < 12 || (minor === 12 && patch < 1)) throw new Error("Node.js >=26.12.1 <27 is required");'
 
 WORKDIR /usr/src/app
 COPY package*.json ./

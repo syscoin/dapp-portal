@@ -10,6 +10,7 @@ name: Deploy Package to Production
 
 jobs:
   build_and_deploy:
+    if: github.repository == 'matter-labs/dapp-portal'
     name: Build and Deploy
     runs-on: ubuntu-latest
     steps:
@@ -23,7 +24,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '20'
+          node-version: '26.12.1'
           cache: 'npm'
 
       - name: Install dependencies
